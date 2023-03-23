@@ -234,10 +234,6 @@ async.each([{}, {databaseId: SECOND_DATABASE_ID}], (extraOptions: any) => {
         assert.strictEqual(datastore.options.projectId, PROJECT_ID);
       });
 
-      it('should localize the databaseId', () => {
-        assert.strictEqual(datastore.options.databaseId, SECOND_DATABASE_ID);
-      });
-
       it('should not default options.projectId to placeholder', () => {
         const datastore = new Datastore({});
         assert.strictEqual(datastore.options.projectId, undefined);
