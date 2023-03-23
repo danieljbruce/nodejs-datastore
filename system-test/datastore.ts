@@ -22,8 +22,9 @@ import {Datastore, DatastoreOptions, Index} from '../src';
 import {google} from '../protos/protos';
 import {Storage} from '@google-cloud/storage';
 import {AggregateField} from '../src/aggregate';
-import {PropertyFilter, EntityFilter, and, or} from '../src/filter';
-import {SECOND_DATABASE_ID} from '../test';
+import {PropertyFilter, and, or} from '../src/filter';
+
+const SECOND_DATABASE_ID = 'foo2';
 
 async.each(
   [
