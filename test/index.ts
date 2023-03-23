@@ -142,26 +142,29 @@ function FakeV1() {}
 
 const sandbox = sinon.createSandbox();
 
-describe('Datastore', () => {
-  let Datastore: typeof ds.Datastore;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let datastore: any;
+async.each([{}, {databaseId: SECOND_DATABASE_ID}], (extraOptions: any) => {
+  console.log(
+    `Running test/index.ts with databaseId ${extraOptions.databaseId}`
+  );
+  describe('Datastore', () => {
+    let Datastore: typeof ds.Datastore;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let datastore: any;
 
-  const PROJECT_ID = 'project-id';
-  const NAMESPACE = 'namespace';
+    const PROJECT_ID = 'project-id';
+    const NAMESPACE = 'namespace';
 
-  const DATASTORE_PROJECT_ID_CACHED = process.env.DATASTORE_PROJECT_ID;
+    const DATASTORE_PROJECT_ID_CACHED = process.env.DATASTORE_PROJECT_ID;
 
-  const DEFAULT_OPTIONS = {
-    projectId: PROJECT_ID,
-    apiEndpoint: 'http://endpoint',
-    credentials: {},
-    keyFilename: 'key/file',
-    email: 'email',
-    namespace: NAMESPACE,
-  };
+    const DEFAULT_OPTIONS = {
+      projectId: PROJECT_ID,
+      apiEndpoint: 'http://endpoint',
+      credentials: {},
+      keyFilename: 'key/file',
+      email: 'email',
+      namespace: NAMESPACE,
+    };
 
-  async.each([{}, {databaseId: SECOND_DATABASE_ID}], (extraOptions: any) => {
     const clientOptions: DatastoreOptions = Object.assign(
       extraOptions,
       DEFAULT_OPTIONS
