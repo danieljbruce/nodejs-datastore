@@ -898,9 +898,11 @@ class DatastoreRequest {
         readConsistency: code,
       };
     }
-    if (query.namespace) {
+    if (query.namespace || query.projectId || query.databaseId) {
       sharedQueryOpts.partitionId = {
         namespaceId: query.namespace,
+        projectId: query.projectId,
+        databaseId: query.databaseId,
       };
     }
     return sharedQueryOpts;

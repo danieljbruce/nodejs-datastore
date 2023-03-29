@@ -419,6 +419,53 @@ describe('Datastore', () => {
         await otherDatastore.delete(postKeySecondary2);
         await otherDatastore.delete(postKeySecondary3);
       });
+      it.only('should ensure running the query works on a partition', async () => {
+        // First write entities to the database by specifying the database in the key
+        const otherDatastore = new Datastore({
+          namespace: `${Date.now()}`,
+          databaseId: SECOND_DATABASE_ID,
+        });
+        const dataD1 = Object.assign({}, post);
+        dataD1.author = 'D1';
+        const dataS1 = Object.assign({}, post);
+        dataS1.author = 'S1';
+        const dataS2 = Object.assign({}, post);
+        dataS2.author = 'S2';
+        const dataS3 = Object.assign({}, post);
+        dataS3.author = 'S3';
+        const postKeyDefault1 = datastore.key(['Post', 'postD1']);
+        const postKeySecondary1 = otherDatastore.key(['Post', 'postS1']);
+        const postKeySecondary2 = otherDatastore.key(['Post', 'postS2']);
+        const postKeySecondary3 = otherDatastore.key(['Post', 'postS3']);
+        await datastore.save({key: postKeyDefault1, data: dataD1});
+        await otherDatastore.save({key: postKeySecondary1, data: dataS1});
+        await otherDatastore.save({key: postKeySecondary2, data: dataS2});
+        await otherDatastore.save({key: postKeySecondary3, data: dataS3});
+        // Next, ensure that the default database has the right records
+        const query = datastore
+          .createQuery('Post')
+          .hasAncestor(postKeyDefault1);
+        const [defaultDatastoreResults] = await datastore.runQuery(query);
+        assert.strictEqual(defaultDatastoreResults.length, 1);
+        assert.strictEqual(defaultDatastoreResults[0].author, 'D1');
+        // Next, ensure that the other database has the right records
+        // This script shows that even when we set the second database in the partition,
+        // we still get results from the first database.
+        const projectId = await datastore.getProjectId();
+        const queryS1 = datastore
+          .createQuery('Post')
+          .hasAncestor(postKeyDefault1)
+          .database(SECOND_DATABASE_ID)
+          .project(projectId);
+        const [secondDatastoreResults1] = await datastore.runQuery(queryS1);
+        assert.strictEqual(secondDatastoreResults1.length, 1);
+        assert.strictEqual(secondDatastoreResults1[0].author, 'D1');
+        // Cleanup
+        await datastore.delete(postKeyDefault1);
+        await otherDatastore.delete(postKeySecondary1);
+        await otherDatastore.delete(postKeySecondary2);
+        await otherDatastore.delete(postKeySecondary3);
+      });
     });
 
     it('should save/get/delete from a snapshot', async () => {

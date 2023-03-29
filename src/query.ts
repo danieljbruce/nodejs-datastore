@@ -74,6 +74,8 @@ export interface Filter {
 class Query {
   scope?: Datastore | Transaction;
   namespace?: string | null;
+  databaseId?: string;
+  projectId?: string;
   kinds: string[];
   filters: Filter[];
   entityFilters: EntityFilter[];
@@ -254,6 +256,16 @@ class Query {
    */
   hasAncestor(key: Key) {
     this.filters.push({name: '__key__', op: 'HAS_ANCESTOR', val: key});
+    return this;
+  }
+
+  database(databaseId: string) {
+    this.databaseId = databaseId;
+    return this;
+  }
+
+  project(projectId: string) {
+    this.projectId = projectId;
     return this;
   }
 
