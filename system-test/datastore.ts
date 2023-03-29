@@ -419,6 +419,52 @@ describe('Datastore', () => {
         await otherDatastore.delete(postKeySecondary2);
         await otherDatastore.delete(postKeySecondary3);
       });
+      it.only('should ensure save respects the databaseId parameter per key', async () => {
+        // First write entities to the database by specifying the database in the key
+        const otherDatastore = new Datastore({
+          namespace: `${Date.now()}`,
+          databaseId: SECOND_DATABASE_ID,
+        });
+        const postKeyDefault1 = datastore.key({
+          path: ['Post', 'postD1'],
+        });
+        const postKeySecondary1 = otherDatastore.key({
+          path: ['Post', 'postS1'],
+          namespace: otherDatastore.namespace,
+          databaseId: SECOND_DATABASE_ID,
+          projectId: 'cloud-native-db-dpes-shared',
+        });
+        const postKeySecondary2 = otherDatastore.key({
+          path: ['Post', 'postS2'],
+          namespace: otherDatastore.namespace,
+          databaseId: SECOND_DATABASE_ID,
+          projectId: 'cloud-native-db-dpes-shared',
+        });
+        const postKeySecondary3 = otherDatastore.key({
+          path: ['Post', 'postS3'],
+          namespace: otherDatastore.namespace,
+          databaseId: SECOND_DATABASE_ID,
+          projectId: 'cloud-native-db-dpes-shared',
+        });
+        await datastore.save({key: postKeyDefault1, data: post});
+        await otherDatastore.save({key: postKeySecondary1, data: post});
+        await otherDatastore.save({key: postKeySecondary2, data: post});
+        await otherDatastore.save({key: postKeySecondary3, data: post});
+        // Next, ensure that the default database has the right records
+        const query = datastore
+          .createQuery('Post')
+          .hasAncestor(postKeyDefault1);
+        const [defaultDatastoreResults] = await datastore.runQuery(query);
+        assert.strictEqual(defaultDatastoreResults.length, 1);
+        // Next, ensure that the other database has the right records
+        const [secondDatastoreResults] = await datastore.runQuery(query);
+        assert.strictEqual(secondDatastoreResults.length, 3);
+        // Cleanup
+        await datastore.delete(postKeyDefault1);
+        await otherDatastore.delete(postKeySecondary1);
+        await otherDatastore.delete(postKeySecondary2);
+        await otherDatastore.delete(postKeySecondary3);
+      });
     });
 
     it('should save/get/delete from a snapshot', async () => {

@@ -282,6 +282,7 @@ export namespace entity {
   }
 
   export interface KeyOptions {
+    projectId?: string;
     databaseId?: string;
     namespace?: string;
     path: PathType[];
@@ -366,6 +367,7 @@ export namespace entity {
   export class Key {
     namespace?: string;
     databaseId?: string;
+    projectId?: string;
     id?: string;
     name?: string;
     kind: string;
@@ -379,6 +381,7 @@ export namespace entity {
        */
       this.namespace = options.namespace;
       this.databaseId = options.databaseId;
+      this.projectId = options.projectId;
 
       options.path = [].slice.call(options.path);
 
@@ -1115,7 +1118,7 @@ export namespace entity {
       path: [],
     };
 
-    if (key.namespace || key.databaseId) {
+    if (key.namespace || key.databaseId || key.projectId) {
       keyProto.partitionId = Object.assign(
         {},
         key.namespace
@@ -1126,6 +1129,11 @@ export namespace entity {
         key.databaseId
           ? {
               databaseId: key.databaseId,
+            }
+          : null,
+        key.projectId
+          ? {
+              projectId: key.projectId,
             }
           : null
       );
