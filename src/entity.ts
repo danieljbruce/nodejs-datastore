@@ -778,6 +778,7 @@ export namespace entity {
    * ```
    */
   export function entityToEntityProto(entityObject: EntityObject): EntityProto {
+    console.log('inside entity to entity proto');
     const properties = entityObject.data;
     const excludeFromIndexes = entityObject.excludeFromIndexes;
 

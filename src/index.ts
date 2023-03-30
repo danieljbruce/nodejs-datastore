@@ -1096,7 +1096,7 @@ class Datastore extends DatastoreRequest {
     // then place in the correct mutation array (insert, update, etc).
     console.log('entities');
     console.log(entities);
-    console.log(entities[0].data.arrayField);
+    // console.log(entities[0].data.arrayField);
     entities
       .map(DatastoreRequest.prepareEntityObject_)
       .forEach((entityObject: Entity, index: number) => {
@@ -1165,6 +1165,7 @@ class Datastore extends DatastoreRequest {
             {}
           );
         } else {
+          console.log('Running entity to entity proto');
           entityProto = entity.entityToEntityProto(entityObject);
         }
 

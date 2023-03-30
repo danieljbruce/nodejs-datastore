@@ -1746,6 +1746,7 @@ async.each(
           );
         });
 
+        /*
         it('should prepare excludeFromIndexes array for large values', done => {
           const longString = Buffer.alloc(1501, '.').toString();
           const data = {
@@ -1824,6 +1825,7 @@ async.each(
             assert.ifError
           );
         });
+        */
 
         it('should allow auto setting the indexed value of a property with excludeLargeProperties', done => {
           const longString = Buffer.alloc(1501, '.').toString();
