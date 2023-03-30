@@ -794,7 +794,12 @@ export namespace entity {
       ),
     };
 
+    console.log('excludeFromIndexesgg');
+    console.log(excludeFromIndexes);
+    console.log('final entity proto');
+    console.log(entityProto);
     if (excludeFromIndexes && excludeFromIndexes.length > 0) {
+      console.log('excludeFromIndexesff');
       excludeFromIndexes.forEach((excludePath: string) => {
         excludePathFromEntity(entityProto, excludePath);
       });
@@ -811,6 +816,8 @@ export namespace entity {
       const hasEntityPath = entityIndex > -1;
       const hasWildCard = wildcardIndex > -1;
 
+      console.log('path');
+      console.log(path);
       if (!hasArrayPath && !hasEntityPath) {
         // This is the path end node. Traversal ends here in either case.
         if (entity.properties) {

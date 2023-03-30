@@ -1077,6 +1077,7 @@ class Datastore extends DatastoreRequest {
     gaxOptionsOrCallback?: CallOptions | SaveCallback,
     cb?: SaveCallback
   ): void | Promise<SaveResponse> {
+    console.log('enter save');
     entities = arrify(entities);
     const gaxOptions =
       typeof gaxOptionsOrCallback === 'object' ? gaxOptionsOrCallback : {};
@@ -1093,6 +1094,9 @@ class Datastore extends DatastoreRequest {
 
     // Iterate over the entity objects, build a proto from all keys and values,
     // then place in the correct mutation array (insert, update, etc).
+    console.log('entities');
+    console.log(entities);
+    console.log(entities[0].data.arrayField);
     entities
       .map(DatastoreRequest.prepareEntityObject_)
       .forEach((entityObject: Entity, index: number) => {
@@ -1125,7 +1129,11 @@ class Datastore extends DatastoreRequest {
         // @TODO remove in @google-cloud/datastore@2.0.0
         // This was replaced with a more efficient mechanism in the top-level
         // `excludeFromIndexes` option.
+        console.log('entityObject data');
+        console.log(entityObject);
+        console.log(entityObject.data);
         if (Array.isArray(entityObject.data)) {
+          console.log(JSON.stringify(entityProto.properties));
           entityProto.properties = entityObject.data.reduce(
             (
               acc: EntityProtoReduceAccumulator,
@@ -1163,9 +1171,13 @@ class Datastore extends DatastoreRequest {
         entityProto.key = entity.keyToKeyProto(entityObject.key);
 
         mutation[method] = entityProto;
+        console.log('mutation');
+        console.log(mutation);
         mutations.push(mutation);
       });
 
+    console.log('mutations');
+    console.log(mutations);
     const reqOpts = {
       mutations,
     };
