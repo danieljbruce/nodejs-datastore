@@ -157,7 +157,7 @@ async.each(
 
       const DATASTORE_PROJECT_ID_CACHED = process.env.DATASTORE_PROJECT_ID;
 
-      const OPTIONS = {
+      const DEFAULT_OPTIONS = {
         projectId: PROJECT_ID,
         apiEndpoint: 'http://endpoint',
         credentials: {},
@@ -166,8 +166,10 @@ async.each(
         namespace: NAMESPACE,
       };
 
+      const OPTIONS = Object.assign(DEFAULT_OPTIONS, clientOptions);
+
       before(() => {
-        console.log(`Testing with options: ${clientOptions}`);
+        console.log(`Testing with databaseId: ${clientOptions.databaseId}`);
         Datastore = proxyquire('../src', {
           './entity.js': {entity: fakeEntity},
           './index-class.js': {Index: FakeIndex},
@@ -296,6 +298,10 @@ async.each(
           const datastore = new Datastore(OPTIONS);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           assert.strictEqual((datastore.options as any).port, port);
+          assert.strictEqual(
+            (datastore.options as any).databaseId,
+            OPTIONS.databaseId
+          );
         });
 
         it('should set grpc ssl credentials if custom endpoint', () => {
@@ -314,6 +320,7 @@ async.each(
           const datastore = new Datastore(OPTIONS);
 
           assert.strictEqual(datastore.options.sslCreds, fakeInsecureCreds);
+          assert.strictEqual(datastore.options.databaseId, OPTIONS.databaseId);
         });
 
         it('should cache a local GoogleAuth instance', () => {
