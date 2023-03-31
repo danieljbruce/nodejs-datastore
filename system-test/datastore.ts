@@ -21,9 +21,11 @@ import {Datastore, Index} from '../src';
 import {google} from '../protos/protos';
 import {Storage} from '@google-cloud/storage';
 import {AggregateField} from '../src/aggregate';
-import {PropertyFilter, EntityFilter, and, or} from '../src/filter';
 import {entity} from '../src/entity';
 import KEY_SYMBOL = entity.KEY_SYMBOL;
+import {PropertyFilter, and, or} from '../src/filter';
+
+const SECOND_DATABASE_ID = 'foo2';
 
 describe('Datastore', () => {
   const testKinds: string[] = [];
@@ -310,6 +312,115 @@ describe('Datastore', () => {
       delete entity[datastore.KEY];
       assert.deepStrictEqual(entity, post);
       await datastore.delete(postKey);
+    });
+
+    describe('multi-db support for read and write operations', () => {
+      it('should run a query with another database', async () => {
+        // First verify that a record gets written to datastore
+        const postKey = datastore.key(['Post', 'post1']);
+        await datastore.save({key: postKey, data: post});
+        const query = datastore.createQuery('Post').hasAncestor(postKey);
+        const [defaultDatastoreResults] = await datastore.runQuery(query);
+        assert.strictEqual(defaultDatastoreResults.length, 1);
+        const [entity] = await datastore.get(postKey);
+        assert.strictEqual(entity.author, 'Silvano');
+        // With another database, verify that a query returns no results
+        const otherDatastore = new Datastore({
+          namespace: `${Date.now()}`,
+          databaseId: SECOND_DATABASE_ID,
+        });
+        const [secondDatastoreResults] = await otherDatastore.runQuery(query);
+        assert.strictEqual(secondDatastoreResults.length, 0);
+        const [otherEntity] = await otherDatastore.get(postKey);
+        assert(typeof otherEntity === 'undefined');
+        // Cleanup
+        await datastore.delete(postKey);
+      });
+      it('should ensure save works with another database', async () => {
+        // First verify that the default database is empty
+        const postKey = datastore.key(['Post', 'post1']);
+        const query = datastore.createQuery('Post').hasAncestor(postKey);
+        const [defaultDatastoreResults] = await datastore.runQuery(query);
+        assert.strictEqual(defaultDatastoreResults.length, 0);
+        const [originalSecondaryResults] = await datastore.runQuery(query);
+        assert.strictEqual(originalSecondaryResults.length, 0);
+        const [entity] = await datastore.get(postKey);
+        assert(typeof entity === 'undefined');
+        // With another database, verify that saving to the database works
+        const otherDatastore = new Datastore({
+          namespace: `${Date.now()}`,
+          databaseId: SECOND_DATABASE_ID,
+        });
+        await otherDatastore.save({key: postKey, data: post});
+        const [secondDatastoreResults] = await otherDatastore.runQuery(query);
+        assert.strictEqual(secondDatastoreResults.length, 1);
+        const [originalResults] = await datastore.runQuery(query);
+        assert.strictEqual(originalResults.length, 0);
+        const [otherEntity] = await otherDatastore.get(postKey);
+        assert.strictEqual(otherEntity.author, 'Silvano');
+        // Cleanup
+        await otherDatastore.delete(postKey);
+      });
+      it('should ensure save respects the databaseId parameter per key', async () => {
+        // First write entities to the database by specifying the database in the key
+        const otherDatastore = new Datastore({
+          namespace: `${Date.now()}`,
+          databaseId: SECOND_DATABASE_ID,
+        });
+        const dataD1 = Object.assign({}, post);
+        dataD1.author = 'D1';
+        const dataS1 = Object.assign({}, post);
+        dataS1.author = 'S1';
+        const dataS2 = Object.assign({}, post);
+        dataS2.author = 'S2';
+        const dataS3 = Object.assign({}, post);
+        dataS3.author = 'S3';
+        const postKeyDefault1 = datastore.key(['Post', 'postD1']);
+        const postKeySecondary1 = otherDatastore.key(['Post', 'postS1']);
+        const postKeySecondary2 = otherDatastore.key(['Post', 'postS2']);
+        const postKeySecondary3 = otherDatastore.key(['Post', 'postS3']);
+        await datastore.save({key: postKeyDefault1, data: dataD1});
+        await otherDatastore.save({key: postKeySecondary1, data: dataS1});
+        await otherDatastore.save({key: postKeySecondary2, data: dataS2});
+        await otherDatastore.save({key: postKeySecondary3, data: dataS3});
+        // Next, ensure that the default database has the right records
+        const query = datastore
+          .createQuery('Post')
+          .hasAncestor(postKeyDefault1);
+        const [defaultDatastoreResults] = await datastore.runQuery(query);
+        assert.strictEqual(defaultDatastoreResults.length, 1);
+        assert.strictEqual(defaultDatastoreResults[0].author, 'D1');
+        // Next, ensure that the other database has the right records
+        const queryS1 = otherDatastore
+          .createQuery('Post')
+          .hasAncestor(postKeySecondary1);
+        const [secondDatastoreResults1] = await otherDatastore.runQuery(
+          queryS1
+        );
+        assert.strictEqual(secondDatastoreResults1.length, 1);
+        assert.strictEqual(secondDatastoreResults1[0].author, 'S1');
+        const queryS2 = otherDatastore
+          .createQuery('Post')
+          .hasAncestor(postKeySecondary2);
+        const [secondDatastoreResults2] = await otherDatastore.runQuery(
+          queryS2
+        );
+        assert.strictEqual(secondDatastoreResults2.length, 1);
+        assert.strictEqual(secondDatastoreResults2[0].author, 'S2');
+        const queryS3 = otherDatastore
+          .createQuery('Post')
+          .hasAncestor(postKeySecondary3);
+        const [secondDatastoreResults3] = await otherDatastore.runQuery(
+          queryS3
+        );
+        assert.strictEqual(secondDatastoreResults3.length, 1);
+        assert.strictEqual(secondDatastoreResults3[0].author, 'S3');
+        // Cleanup
+        await datastore.delete(postKeyDefault1);
+        await otherDatastore.delete(postKeySecondary1);
+        await otherDatastore.delete(postKeySecondary2);
+        await otherDatastore.delete(postKeySecondary3);
+      });
     });
 
     it('should save/get/delete from a snapshot', async () => {

@@ -66,6 +66,7 @@ import {Transaction} from './transaction';
 import {promisifyAll} from '@google-cloud/promisify';
 import {google} from '../protos/protos';
 import {AggregateQuery} from './aggregate';
+import {addDatabaseIdToRequest} from './util';
 
 const {grpc} = new GrpcClient();
 
@@ -694,8 +695,27 @@ class Datastore extends DatastoreRequest {
     );
   }
 
+  /**
+   * Gets the database id that all requests will be run against.
+   *
+   * @returns {string} The database id that the current client is set to that
+   *    requests will run against.
+   */
+  getDatabaseId(): string | undefined {
+    return this.options.databaseId;
+  }
+
   getProjectId(): Promise<string> {
     return this.auth.getProjectId();
+  }
+
+  /**
+   * Gets the database id that all requests will be run against.
+   *
+   * @param {any} [reqOpts] The request operations to add the databaseId to
+   */
+  addDatabaseIdToRequest(reqOpts: any): void {
+    addDatabaseIdToRequest(this, reqOpts);
   }
 
   /**
@@ -1812,7 +1832,9 @@ promisifyAll(Datastore, {
     'double',
     'isDouble',
     'geoPoint',
+    'getDatabaseId',
     'getProjectId',
+    'getRequestWithDatabaseId',
     'getSharedQueryOptions',
     'isGeoPoint',
     'index',
@@ -1893,6 +1915,7 @@ export interface DatastoreOptions extends GoogleAuthOptions {
   namespace?: string;
   apiEndpoint?: string;
   sslCreds?: ChannelCredentials;
+  databaseId?: string;
 }
 
 export interface KeyToLegacyUrlSafeCallback {

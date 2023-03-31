@@ -995,6 +995,8 @@ class DatastoreRequest {
       }
     }
 
+    datastore.addDatabaseIdToRequest(reqOpts);
+
     if (method === 'rollback') {
       reqOpts.transaction = this.id;
     }
@@ -1155,6 +1157,7 @@ export interface SharedQueryOptions {
   };
 }
 export interface RequestOptions extends SharedQueryOptions {
+  databaseId?: string;
   mutations?: google.datastore.v1.IMutation[];
   keys?: Entity;
   transactionOptions?: {

@@ -36,6 +36,7 @@ import {
   GetResponse,
   RequestCallback,
 } from '../src/request';
+import {addDatabaseIdToRequest} from '../src/util';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -87,6 +88,11 @@ describe('Request', () => {
     });
     v1FakeClientOverride = null;
     request = new Request();
+    request.datastore = {
+      addDatabaseIdToRequest(d: any, r: any) {
+        addDatabaseIdToRequest(d, r);
+      },
+    };
   });
 
   afterEach(() => sandbox.restore());
@@ -1624,6 +1630,9 @@ describe('Request', () => {
           getProjectId(callback: Function) {
             callback(null, PROJECT_ID);
           },
+        },
+        addDatabaseIdToRequest(d: any, r: any) {
+          addDatabaseIdToRequest(d, r);
         },
       };
     });

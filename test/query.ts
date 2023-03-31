@@ -20,6 +20,8 @@ const {Query} = require('../src/query');
 import {Datastore} from '../src';
 import {AggregateField, AggregateQuery} from '../src/aggregate';
 import {PropertyFilter, EntityFilter, or} from '../src/filter';
+import {entity} from '../src/entity';
+import {SECOND_DATABASE_ID} from './index';
 
 describe('Query', () => {
   const SCOPE = {} as Datastore;
@@ -431,5 +433,49 @@ describe('Query', () => {
       const results = query.runStream(options);
       assert.strictEqual(results, runQueryReturnValue);
     });
+  });
+
+  it('should pass the database id to the generated layer', async () => {
+    const options = {
+      namespace: `${Date.now()}`,
+      databaseId: SECOND_DATABASE_ID,
+      projectId: 'test-project-id',
+    };
+    const clientName = 'DatastoreClient';
+    const otherDatastore = new Datastore(options);
+    const postKey = new entity.Key({path: ['Post', 'post1']});
+    // Initialize the generated client so that we can mock it out
+    const gapic = Object.freeze({
+      v1: require('../src/v1'),
+    });
+    otherDatastore.clients_.set(clientName, new gapic.v1[clientName](options));
+    const dataClient = otherDatastore.clients_.get(clientName);
+    const projectId = await otherDatastore.getProjectId();
+    if (dataClient) {
+      dataClient['commit'] = (
+        request: any,
+        options: any,
+        callback: () => void
+      ) => {
+        // These asserts here don't seem to bubble up to the test runner.
+        if (
+          request.databaseId !== SECOND_DATABASE_ID ||
+          request.projectId !== projectId ||
+          !options ||
+          !options.headers ||
+          options.headers['google-cloud-resource-prefix'] !==
+            `projects/${projectId}`
+        ) {
+          // We have to do the assert check like this.
+          // Otherwise, assert.strictEqual will not bubble up to the generated layer
+          const failMessage =
+            'asserts fail for should pass the database id to the generated layer';
+          console.warn(failMessage);
+          assert.fail(failMessage);
+        }
+        callback();
+      };
+    }
+    await otherDatastore.save({key: postKey, data: {title: 'test'}});
   });
 });

@@ -19,7 +19,7 @@ import * as proxyquire from 'proxyquire';
 import {PassThrough, Readable} from 'stream';
 
 import * as ds from '../src';
-import {DatastoreOptions} from '../src';
+import {Datastore, DatastoreOptions} from '../src';
 import {entity, Entity, EntityProto, EntityObject} from '../src/entity';
 import {RequestConfig} from '../src/request';
 import * as is from 'is';
@@ -91,6 +91,10 @@ function fakeGoogleAuth(...args: Array<{}>) {
 }
 
 let createInsecureOverride: Function | null;
+
+const SECOND_DATABASE_ID = 'foo2';
+
+export {SECOND_DATABASE_ID};
 
 const fakeGoogleGax = {
   GoogleAuth: fakeGoogleAuth,
@@ -2170,6 +2174,16 @@ async.each([{}, {}], (clientOptions: DatastoreOptions) => {
         assert.strictEqual(key.kind, 'Task');
         assert.strictEqual(key.name, 'Test');
       });
+    });
+  });
+
+  describe('multi-db support', () => {
+    it('should get the database id from the client', async () => {
+      const otherDatastore = new Datastore({
+        namespace: `${Date.now()}`,
+        databaseId: SECOND_DATABASE_ID,
+      });
+      assert.strictEqual(otherDatastore.getDatabaseId(), SECOND_DATABASE_ID);
     });
   });
 });
