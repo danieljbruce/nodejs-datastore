@@ -1175,7 +1175,7 @@ describe('Datastore', () => {
        */
       const key = datastore.key(['Company', 'Google']);
       const obj = {
-        url: 'www.google.com',
+        url: 'www.google.com.sample',
       };
       const transaction = datastore.transaction();
       const startTime = new Date().getTime();
@@ -1192,6 +1192,37 @@ describe('Datastore', () => {
       printTimeElasped('After commit');
       const [entity] = await datastore.get(key);
       delete entity[datastore.KEY];
+      assert.deepStrictEqual(entity, obj);
+    });
+
+    it.only('should observe a save because omitting `run` results in a save anyway', async () => {
+      // First delete the entity
+      const key = datastore.key(['Company', 'Google']);
+      const obj = {
+        url: 'www.google.com.sample',
+      };
+      await datastore.delete(key);
+      const [entity1] = await datastore.get(key);
+      assert.deepStrictEqual(entity1, undefined);
+      // Next run a transaction without running transaction.run()
+      const transaction = datastore.transaction();
+      const startTime = new Date().getTime();
+      function printTimeElasped(label: string) {
+        console.log(`${label}: ${new Date().getTime() - startTime}`);
+      }
+      printTimeElasped('Before begin transaction');
+      printTimeElasped('After begin transaction');
+      transaction.save({key, data: obj});
+      printTimeElasped('After save');
+      const committedResults = await transaction.commit();
+      printTimeElasped('After commit');
+      // Compare the results and observe that a save occurred
+      const [transactionEntity] = await transaction.get(key);
+      printTimeElasped('After fetch');
+      const [entity] = await datastore.get(key);
+      delete entity[datastore.KEY];
+      delete transactionEntity[datastore.KEY];
+      assert.deepStrictEqual(transactionEntity, obj);
       assert.deepStrictEqual(entity, obj);
     });
 
@@ -1263,7 +1294,7 @@ describe('Datastore', () => {
       assert.deepStrictEqual(entity, obj);
     });
 
-    it.only('should run two transactions in a row', async () => {
+    it('should run two transactions in a row', async () => {
       /*
         24cc5967ecd2fe3809a33fdf81b4852893b87885
         Before begin transaction: 0
