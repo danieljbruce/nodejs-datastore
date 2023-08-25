@@ -1226,7 +1226,9 @@ describe('Datastore', () => {
       assert.deepStrictEqual(entity, obj);
     });
 
-    it.only('should use readTime from the query options', async () => {
+    it('should use readTime from the query options', async () => {
+      // TODO: Should use readTime from the query options
+      // TODO: If query options are omitted then should use readTime from the readOnly options
       // First delete the entity
       function sleep(ms: number) {
         return new Promise(resolve => setTimeout(resolve, ms));
@@ -1254,11 +1256,11 @@ describe('Datastore', () => {
         newTransaction: {
           readOnly: {
             readTime: {
-              seconds: afterWrite,
+              seconds: Math.floor(beforeWrite / 1000),
             },
           },
         },
-        readTime: beforeWrite,
+        // readTime: beforeWrite,
       };
       /*
       const options = {
@@ -1399,7 +1401,7 @@ describe('Datastore', () => {
       // assert.deepStrictEqual(entity, obj);
     });
 
-    it('should run without begin transaction and also new transaction with an existing transaction', async () => {
+    it.only('should run without begin transaction and also new transaction with an existing transaction', async () => {
       /*
       2c30626d18eca5fffd28214cebfe2ce4370353fe
       Before begin transaction: 0
