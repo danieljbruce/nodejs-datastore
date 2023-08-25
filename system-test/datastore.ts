@@ -1195,7 +1195,7 @@ describe('Datastore', () => {
       assert.deepStrictEqual(entity, obj);
     });
 
-    it.only('should observe a save because omitting `run` results in a save anyway', async () => {
+    it('should observe a save because omitting `run` results in a save anyway', async () => {
       // First delete the entity
       const key = datastore.key(['Company', 'Google']);
       const obj = {
@@ -1211,6 +1211,64 @@ describe('Datastore', () => {
         console.log(`${label}: ${new Date().getTime() - startTime}`);
       }
       printTimeElasped('Before begin transaction');
+      printTimeElasped('After begin transaction');
+      transaction.save({key, data: obj});
+      printTimeElasped('After save');
+      const committedResults = await transaction.commit();
+      printTimeElasped('After commit');
+      // Compare the results and observe that a save occurred
+      const [transactionEntity] = await transaction.get(key);
+      printTimeElasped('After fetch');
+      const [entity] = await datastore.get(key);
+      delete entity[datastore.KEY];
+      delete transactionEntity[datastore.KEY];
+      assert.deepStrictEqual(transactionEntity, obj);
+      assert.deepStrictEqual(entity, obj);
+    });
+
+    it.only('should use readTime from the query options', async () => {
+      // First delete the entity
+      function sleep(ms: number) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+      const key = datastore.key(['Company', 'Google']);
+      const obj = {
+        url: 'www.google.com.sample',
+      };
+      await datastore.delete(key);
+      const [entity1] = await datastore.get(key);
+      assert.deepStrictEqual(entity1, undefined);
+      // Next run a transaction without running transaction.run()
+      const transaction = datastore.transaction();
+      const startTime = new Date().getTime();
+      function printTimeElasped(label: string) {
+        console.log(`${label}: ${new Date().getTime() - startTime}`);
+      }
+      const beforeWrite = new Date().getTime();
+      // const otherTime = Date.now();
+      await sleep(2000);
+      await datastore.save({key, data: obj});
+      await sleep(2000);
+      const afterWrite = new Date().getTime();
+      const options = {
+        newTransaction: {
+          readOnly: {
+            readTime: {
+              seconds: afterWrite,
+            },
+          },
+        },
+        readTime: beforeWrite,
+      };
+      /*
+      const options = {
+        readTime: afterWrite,
+      };
+      */
+      // const options = undefined;
+      printTimeElasped('Before begin transaction');
+      const transactionEntityGet = await transaction.get(key, options);
+      assert.deepStrictEqual(transactionEntityGet[0], undefined);
       printTimeElasped('After begin transaction');
       transaction.save({key, data: obj});
       printTimeElasped('After save');
