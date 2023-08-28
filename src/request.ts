@@ -312,6 +312,11 @@ class DatastoreRequest {
           gaxOpts: options.gaxOptions,
         },
         (err, resp) => {
+          /*
+          if (resp.transaction) {
+            this.id = resp.transaction;
+          }
+           */
           if (err) {
             stream.destroy(err);
             return;
