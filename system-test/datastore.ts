@@ -25,6 +25,7 @@ import {PropertyFilter, EntityFilter, and, or} from '../src/filter';
 import {entity} from '../src/entity';
 import KEY_SYMBOL = entity.KEY_SYMBOL;
 import {RunQueryOptions} from '../src/query';
+import {v4 as uuidv4} from 'uuid';
 
 describe('Datastore', () => {
   const testKinds: string[] = [];
@@ -1319,6 +1320,31 @@ describe('Datastore', () => {
       assert.deepStrictEqual(entity, obj);
     });
 
+    it('should just pass in a transaction id and use that as the transaction id', async () => {
+      // This actually results in an invalid transaction
+      const id = 'sample'; // uuidv4();
+      const key = datastore.key(['Company', 'Google']);
+      const obj = {
+        url: 'www.google.com',
+      };
+      const transaction = datastore.transaction({id});
+      const startTime = new Date().getTime();
+      function printTimeElasped(label: string) {
+        console.log(`${label}: ${new Date().getTime() - startTime}`);
+      }
+      printTimeElasped('Before begin transaction');
+      printTimeElasped('After begin transaction');
+      const value = await transaction.get(key);
+      printTimeElasped('After fetch');
+      transaction.save({key, data: obj});
+      printTimeElasped('After save');
+      const committedResults = await transaction.commit();
+      printTimeElasped('After commit');
+      const [entity] = await datastore.get(key);
+      delete entity[datastore.KEY];
+      assert.deepStrictEqual(entity, obj);
+    });
+
     it('should run without begin transaction and also new transaction with previous txn that doesnt exist yet', async () => {
       /*
       2c30626d18eca5fffd28214cebfe2ce4370353fe
@@ -1326,15 +1352,20 @@ describe('Datastore', () => {
       After begin transaction: 1
       Error: 3 INVALID_ARGUMENT: Invalid transaction.
       */
+      console.log('define key');
       const key = datastore.key(['Company', 'Google']);
+      console.log('define obj');
       const obj = {
         url: 'www.google.com',
       };
+      console.log('define transaction');
       const transaction = datastore.transaction();
+      console.log('start time');
       const startTime = new Date().getTime();
       function printTimeElasped(label: string) {
         console.log(`${label}: ${new Date().getTime() - startTime}`);
       }
+      console.log('options');
       const options = {
         newTransaction: {
           readWrite: {
@@ -1401,7 +1432,7 @@ describe('Datastore', () => {
       // assert.deepStrictEqual(entity, obj);
     });
 
-    it('should run without begin transaction and also new transaction with an existing transaction', async () => {
+    it.only('should run without begin transaction and also new transaction with an existing transaction', async () => {
       /*
       2c30626d18eca5fffd28214cebfe2ce4370353fe
       Before begin transaction: 0
