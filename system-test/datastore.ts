@@ -1489,6 +1489,12 @@ describe('Datastore', () => {
       printTimeElasped('After begin transaction');
       await transaction.get(key, options);
       printTimeElasped('After fetch');
+      if (transaction1.id && transaction.returnedTransaction) {
+        // Almost always not equal
+        assert.notEqual(transaction1.id[3], transaction.returnedTransaction[3]);
+      } else {
+        throw Error('transaction properties not defined');
+      }
       const committedResults = await transaction.commit();
       printTimeElasped('After commit');
       const [entity] = await datastore.get(key);

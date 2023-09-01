@@ -80,6 +80,7 @@ const CONSISTENCY_PROTO_CODE: ConsistencyProtoCode = {
  */
 class DatastoreRequest {
   id: string | undefined;
+  returnedTransaction: string | undefined;
   requests_:
     | Entity
     | {
@@ -312,11 +313,9 @@ class DatastoreRequest {
           gaxOpts: options.gaxOptions,
         },
         (err, resp) => {
-          /*
           if (resp.transaction) {
-            this.id = resp.transaction;
+            this.returnedTransaction = resp.transaction;
           }
-           */
           if (err) {
             stream.destroy(err);
             return;
