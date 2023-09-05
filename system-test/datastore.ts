@@ -1677,6 +1677,49 @@ describe('Datastore', () => {
       // assert.deepStrictEqual(entity, obj);
     });
 
+    it.only('should pass in response to previous_transaction when previous tx has not been committed', async () => {
+      const key = datastore.key(['Company', 'Google']);
+      const obj = {
+        url: 'www.google.com',
+      };
+      // First do a transaction so that we have an id to provide in the next transaction
+      const transaction1 = datastore.transaction();
+      const startTime = new Date().getTime();
+      function printTimeElasped(label: string) {
+        console.log(`${label}: ${new Date().getTime() - startTime}`);
+      }
+      printTimeElasped('Before begin transaction');
+      await transaction1.run();
+      printTimeElasped('After begin transaction');
+      await transaction1.get(key);
+      printTimeElasped('After fetch');
+      transaction1.save({key, data: obj});
+      // Do a second transaction where we provide the id from the first transaction in the second transaction
+      const transaction = datastore.transaction();
+      const options = {
+        newTransaction: {
+          readWrite: {
+            previousTransaction: transaction1.id,
+          },
+        },
+      };
+      printTimeElasped('Before begin transaction');
+      await transaction.run();
+      printTimeElasped('After begin transaction');
+      await transaction.get(key, options);
+      printTimeElasped('After save');
+      const committedResults1 = await transaction1.commit();
+      printTimeElasped('After commit');
+      const [entity1] = await datastore.get(key);
+      delete entity1[datastore.KEY];
+      printTimeElasped('After fetch');
+      const committedResults = await transaction.commit();
+      printTimeElasped('After commit');
+      const [entity] = await datastore.get(key);
+      // delete entity[datastore.KEY];
+      // assert.deepStrictEqual(entity, obj);
+    });
+
     it('should run with begin transaction and see if returned transaction matches one provided', async () => {
       const key = datastore.key(['Company', 'Google']);
       const obj = {
@@ -1825,7 +1868,7 @@ describe('Datastore', () => {
       console.log(entity); // Will be www.google.com2
     });
 
-    it.only('should run two write transactions and then reference both transactions', async () => {
+    it('should run two write transactions and then reference both transactions', async () => {
       const key = datastore.key(['Company', 'Google']);
       const obj = {
         url: 'www.google.com1',

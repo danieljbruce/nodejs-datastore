@@ -313,7 +313,7 @@ class DatastoreRequest {
           gaxOpts: options.gaxOptions,
         },
         (err, resp) => {
-          if (resp.transaction) {
+          if (resp && resp.transaction) {
             this.returnedTransaction = resp.transaction;
           }
           if (err) {
