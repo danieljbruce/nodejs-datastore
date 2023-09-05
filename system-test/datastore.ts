@@ -1432,7 +1432,7 @@ describe('Datastore', () => {
       // assert.deepStrictEqual(entity, obj);
     });
 
-    it.only('should run without begin transaction and also new transaction with an existing transaction', async () => {
+    it('should run without begin transaction and also new transaction with an existing transaction', async () => {
       /*
       2c30626d18eca5fffd28214cebfe2ce4370353fe
       Before begin transaction: 0
@@ -1821,6 +1821,77 @@ describe('Datastore', () => {
       printTimeElasped('After fetch');
       const committedResults = await transaction.commit();
       printTimeElasped('After commit');
+      const [entity] = await datastore.get(key);
+      console.log(entity); // Will be www.google.com2
+    });
+
+    it.only('should run two write transactions and then reference both transactions', async () => {
+      const key = datastore.key(['Company', 'Google']);
+      const obj = {
+        url: 'www.google.com1',
+      };
+      // First do a transaction so that we have an id to provide in the next transaction
+      const transaction1 = datastore.transaction();
+      const startTime = new Date().getTime();
+      function printTimeElasped(label: string) {
+        console.log(`${label}: ${new Date().getTime() - startTime}`);
+      }
+      printTimeElasped('Before begin transaction');
+      await transaction1.run();
+      printTimeElasped('After begin transaction');
+      await transaction1.get(key);
+      printTimeElasped('After fetch');
+      transaction1.save({key, data: obj});
+      printTimeElasped('After save');
+      const committedResults1 = await transaction1.commit();
+      printTimeElasped('After commit');
+      const [entity1] = await datastore.get(key);
+      delete entity1[datastore.KEY];
+      // Second do another write transaction
+      const transaction2 = datastore.transaction();
+      const obj2 = {
+        url: 'www.google.com2',
+      };
+      printTimeElasped('Before begin transaction');
+      await transaction2.run();
+      printTimeElasped('After begin transaction');
+      await transaction2.get(key);
+      printTimeElasped('After fetch');
+      transaction2.save({key, data: obj2});
+      printTimeElasped('After save');
+      const committedResults2 = await transaction2.commit();
+      printTimeElasped('After commit');
+      const [entity2] = await datastore.get(key);
+      delete entity2[datastore.KEY];
+      // Do a third transaction where we provide the id from the first transaction in the third transaction
+      const transaction = datastore.transaction();
+      const transactionBeforeFetch1 = transaction.id;
+      printTimeElasped('After begin transaction');
+      const options = {
+        newTransaction: {
+          readWrite: {
+            previousTransaction: transaction1.id,
+          },
+        },
+      };
+      await transaction.get(key, options);
+      const transactionAfterFetch1 = transaction.returnedTransaction;
+      printTimeElasped('After fetch');
+      const options2 = {
+        newTransaction: {
+          readWrite: {
+            previousTransaction: transaction2.returnedTransaction,
+          },
+        },
+      };
+      await transaction.get(key, options2);
+      const transactionAfterFetch2 = transaction.id;
+      printTimeElasped('After fetch 2');
+      const committedResults = await transaction.commit();
+      printTimeElasped('After commit');
+      assert.strictEqual(transactionBeforeFetch1, undefined);
+      assert.notEqual(transactionAfterFetch1, undefined);
+      assert.strictEqual(transactionAfterFetch2, undefined);
       const [entity] = await datastore.get(key);
       console.log(entity); // Will be www.google.com2
     });
