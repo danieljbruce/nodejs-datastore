@@ -1868,6 +1868,9 @@ describe('Datastore', () => {
       }
 
       async function saveTx2(transaction1: any, transaction2: any) {
+        function sleep(ms: number) {
+          return new Promise(resolve => setTimeout(resolve, ms));
+        }
         const obj2 = {
           url: 'www.google.com2',
         };
@@ -1875,10 +1878,21 @@ describe('Datastore', () => {
         transaction2.save({key, data: obj2});
         transaction2.save({key: otherKey, data: obj3});
         printTimeElasped('After fetch');
-        const committedResults = await transaction2.commit();
-        printTimeElasped('After commit');
-        const committedResults1 = await transaction1.commit();
-        printTimeElasped('After commit');
+        // await Promise.all([transaction2.commit(), transaction1.commit()]);
+        const runTx1 = async () => {
+          await sleep(100);
+          await transaction1.commit();
+          console.log('done 1');
+        };
+        const runTx2 = async () => {
+          await transaction2.commit();
+          console.log('done 2');
+        };
+        await Promise.all([runTx1(), runTx2()]);
+        // const committedResults = await transaction2.commit();
+        // printTimeElasped('After commit');
+        // const committedResults1 = await transaction1.commit();
+        // printTimeElasped('After commit');
         const [entity1] = await datastore.get(key);
         assert.strictEqual(entity1.url, 'www.google.com2');
         delete entity1[datastore.KEY];
@@ -1910,8 +1924,8 @@ describe('Datastore', () => {
         // Error: 10 ABORTED: too much contention on these datastore entities. please try again.
         const tx1 = await getTx1();
         // Do a second transaction where we provide the id from the first transaction in the second transaction
-        // const transaction = datastore.transaction({id: tx1.id});
-        const tx2 = datastore.transaction();
+        const tx2 = datastore.transaction({id: tx1.id});
+        // const tx2 = datastore.transaction();
         await tx2.run();
         printTimeElasped('Before begin transaction');
         printTimeElasped('After save');
@@ -1928,7 +1942,8 @@ describe('Datastore', () => {
         await tx2.commit();
         const entityKeyBefore = await datastore.get(key);
         const entityOtherKeyBefore = await datastore.get(otherKey);
-        const tx3 = datastore.transaction({id: tx2.id});
+        // const tx3 = datastore.transaction({id: tx2.id});
+        const tx3 = datastore.transaction();
         await tx3.run();
         tx3.save({key, data: obj3});
         await tx3.commit();
