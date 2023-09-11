@@ -1826,7 +1826,7 @@ describe('Datastore', () => {
         await saveTx2(tx1, transaction);
       });
 
-      it.only('with begin transaction', async () => {
+      it('with begin transaction', async () => {
         // Error: 10 ABORTED: too much contention on these datastore entities. please try again.
         const tx1 = await getTx1();
         // Do a second transaction where we provide the id from the first transaction in the second transaction
@@ -1837,6 +1837,104 @@ describe('Datastore', () => {
         printTimeElasped('After save');
         await transaction.get(key);
         await saveTx2(tx1, transaction);
+      });
+    });
+
+    describe('play with previous tx when using tx.run', () => {
+      const key = datastore.key(['Company', 'Google']);
+      const otherKey = datastore.key(['Company', 'Google2']);
+      const obj3 = {
+        url: 'www.google.com3',
+      };
+      let startTime = 0;
+      function printTimeElasped(label: string) {
+        console.log(`${label}: ${new Date().getTime() - startTime}`);
+      }
+      async function getTx1() {
+        const obj = {
+          url: 'www.google.com',
+        };
+        // First do a transaction so that we have an id to provide in the next transaction
+        const transaction1 = datastore.transaction();
+        startTime = new Date().getTime();
+        printTimeElasped('Before begin transaction');
+        await transaction1.run();
+        printTimeElasped('After begin transaction');
+        await transaction1.get(key);
+        printTimeElasped('After fetch');
+        transaction1.save({key, data: obj});
+        transaction1.save({key: otherKey, data: obj});
+        return transaction1;
+      }
+
+      async function saveTx2(transaction1: any, transaction2: any) {
+        const obj2 = {
+          url: 'www.google.com2',
+        };
+        printTimeElasped('After begin transaction');
+        transaction2.save({key, data: obj2});
+        transaction2.save({key: otherKey, data: obj3});
+        printTimeElasped('After fetch');
+        const committedResults = await transaction2.commit();
+        printTimeElasped('After commit');
+        const committedResults1 = await transaction1.commit();
+        printTimeElasped('After commit');
+        const [entity1] = await datastore.get(key);
+        assert.strictEqual(entity1.url, 'www.google.com2');
+        delete entity1[datastore.KEY];
+        printTimeElasped('After fetch');
+        const [entity] = await datastore.get(key);
+        // delete entity[datastore.KEY];
+        // assert.deepStrictEqual(entity, obj);
+      }
+
+      /*
+      it('without begin transaction', async () => {
+        // Test passes
+        const tx1 = await getTx1();
+        // Do a second transaction where we provide the id from the first transaction in the second transaction
+        const transaction = datastore.transaction();
+        const options = {
+          newTransaction: {
+            readWrite: {
+              previousTransaction: tx1.id,
+            },
+          },
+        };
+        await transaction.get(key, options);
+        await saveTx2(tx1, transaction);
+      });
+      */
+
+      it.only('with begin transaction', async () => {
+        // Error: 10 ABORTED: too much contention on these datastore entities. please try again.
+        const tx1 = await getTx1();
+        // Do a second transaction where we provide the id from the first transaction in the second transaction
+        // const transaction = datastore.transaction({id: tx1.id});
+        const tx2 = datastore.transaction();
+        await tx2.run();
+        printTimeElasped('Before begin transaction');
+        printTimeElasped('After save');
+        // await transaction.get(key);
+        try {
+          await saveTx2(tx1, tx2);
+        } catch (e: any) {
+          console.log(e);
+        }
+        printTimeElasped('After begin transaction');
+        // await tx1.rollback(); // Eliminate contention
+        // const committedResults = await tx1.commit();
+        // const committedResults = await transaction.commit();
+        await tx2.commit();
+        const entityKeyBefore = await datastore.get(key);
+        const entityOtherKeyBefore = await datastore.get(otherKey);
+        const tx3 = datastore.transaction({id: tx2.id});
+        await tx3.run();
+        tx3.save({key, data: obj3});
+        await tx3.commit();
+        const entityKeyAfter = await datastore.get(key);
+        const entityOtherKeyAfter = await datastore.get(otherKey);
+        console.log('assert checks');
       });
     });
 
