@@ -1810,7 +1810,7 @@ describe('Datastore', () => {
         // assert.deepStrictEqual(entity, obj);
       }
 
-      it('should save data for transaction that is run second', async () => {
+      it('without begin transaction', async () => {
         // Test passes
         const tx1 = await getTx1();
         // Do a second transaction where we provide the id from the first transaction in the second transaction
@@ -1826,7 +1826,7 @@ describe('Datastore', () => {
         await saveTx2(tx1, transaction);
       });
 
-      it.only('playing around with transaction concurrency', async () => {
+      it.only('with begin transaction', async () => {
         // Error: 10 ABORTED: too much contention on these datastore entities. please try again.
         const tx1 = await getTx1();
         // Do a second transaction where we provide the id from the first transaction in the second transaction
