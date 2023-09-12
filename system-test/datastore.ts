@@ -17,7 +17,7 @@ import {readFileSync} from 'fs';
 import * as path from 'path';
 import {after, before, describe, it} from 'mocha';
 import * as yaml from 'js-yaml';
-import {Datastore, Index} from '../src';
+import {Datastore, DatastoreClient, Index} from '../src';
 import {google} from '../protos/protos';
 import {Storage} from '@google-cloud/storage';
 import {AggregateField} from '../src/aggregate';
@@ -26,6 +26,8 @@ import {entity} from '../src/entity';
 import KEY_SYMBOL = entity.KEY_SYMBOL;
 import {RunQueryOptions} from '../src/query';
 import {v4 as uuidv4} from 'uuid';
+import BeginTransactionResponse = google.datastore.v1.BeginTransactionResponse;
+import * as protos from '../protos/protos';
 
 describe('Datastore', () => {
   const testKinds: string[] = [];
@@ -1876,7 +1878,7 @@ describe('Datastore', () => {
         };
         printTimeElasped('After begin transaction');
         transaction2.save({key, data: obj2});
-        transaction2.save({key: otherKey, data: obj3});
+        // transaction2.save({key: otherKey, data: obj3});
         printTimeElasped('After fetch');
         // await Promise.all([transaction2.commit(), transaction1.commit()]);
         const runTx1 = async () => {
@@ -1920,12 +1922,12 @@ describe('Datastore', () => {
       });
       */
 
-      it.only('with begin transaction', async () => {
+      it('with begin transaction', async () => {
         // Error: 10 ABORTED: too much contention on these datastore entities. please try again.
         const tx1 = await getTx1();
         // Do a second transaction where we provide the id from the first transaction in the second transaction
-        const tx2 = datastore.transaction({id: tx1.id});
-        // const tx2 = datastore.transaction();
+        // const tx2 = datastore.transaction({id: tx1.id});
+        const tx2 = datastore.transaction();
         await tx2.run();
         printTimeElasped('Before begin transaction');
         printTimeElasped('After save');
@@ -1950,6 +1952,83 @@ describe('Datastore', () => {
         const entityKeyAfter = await datastore.get(key);
         const entityOtherKeyAfter = await datastore.get(otherKey);
         console.log('assert checks');
+      });
+    });
+
+    describe('With the data client directly', async () => {
+      const key = datastore.key(['Company', 'Google']);
+      const clientName = 'DatastoreClient';
+      let dataClient: DatastoreClient;
+      const namespaceId = datastore.namespace;
+      const projectId = 'hw-cloudv1-sdk';
+
+      before(async () => {
+        await datastore.get(key); // Initialize the client
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        dataClient = datastore.clients_.get(clientName) as DatastoreClient;
+      });
+
+      it.only('run a transaction using the gapic client', async () => {
+        // NOTE: THIS IS NOT HOW YOU WOULD USE THIS CODE
+        // IT IS TO DEMONSTRATE THE BEHAVIOR OF THE GAPIC LAYER SO WE CAN PLAN
+        // Begin the transaction
+        const beginTransactionResponse = (
+          await dataClient.beginTransaction({
+            projectId,
+            transactionOptions: {},
+          })
+        )[0];
+        const lookupRequest = {
+          keys: [
+            {
+              path: [
+                {
+                  kind: 'Company',
+                  name: 'Google',
+                },
+              ],
+              partitionId: {
+                namespaceId,
+              },
+            },
+          ],
+          readOptions: {
+            transaction: beginTransactionResponse?.transaction,
+          },
+          projectId,
+        };
+        const lookupResponse = (await dataClient.lookup(lookupRequest))[0];
+        const mutations = [
+          {
+            upsert: {
+              key: {
+                path: [
+                  {
+                    kind: 'Company',
+                    name: 'Google',
+                  },
+                ],
+                partitionId: {
+                  namespaceId,
+                },
+              },
+              properties: {
+                url: {
+                  stringValue: 'www.google.com2',
+                },
+              },
+            },
+          },
+        ];
+        const commitRequest: protos.google.datastore.v1.ICommitRequest = {
+          mutations,
+          mode: 'TRANSACTIONAL',
+          transaction: beginTransactionResponse?.transaction,
+          projectId,
+        };
+        const commitResponse = (await dataClient.commit(commitRequest))[0];
+        console.log('test');
       });
     });
 
