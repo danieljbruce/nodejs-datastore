@@ -1969,7 +1969,93 @@ describe('Datastore', () => {
         dataClient = datastore.clients_.get(clientName) as DatastoreClient;
       });
 
-      it.only('run a transaction using the gapic client', async () => {
+      async function runBasicBeginTransaction() {
+        return await dataClient.beginTransaction({
+          projectId,
+          transactionOptions: {},
+        });
+      }
+
+      async function runBasicLookupRequest(
+        key: string,
+        transaction: Uint8Array | string | null | undefined
+      ) {
+        const lookupRequest = {
+          keys: [
+            {
+              path: [
+                {
+                  kind: 'Company',
+                  name: key,
+                },
+              ],
+              partitionId: {
+                namespaceId,
+              },
+            },
+          ],
+          readOptions: {
+            transaction: transaction,
+          },
+          projectId,
+        };
+        return await dataClient.lookup(lookupRequest);
+      }
+
+      async function runBasicCommitRequest(
+        key: string,
+        value: string,
+        transaction: Uint8Array | string | null | undefined
+      ) {
+        const mutations = [
+          {
+            upsert: {
+              key: {
+                path: [
+                  {
+                    kind: 'Company',
+                    name: key,
+                  },
+                ],
+                partitionId: {
+                  namespaceId,
+                },
+              },
+              properties: {
+                url: {
+                  stringValue: value,
+                },
+              },
+            },
+          },
+        ];
+        const commitRequest: protos.google.datastore.v1.ICommitRequest = {
+          mutations,
+          mode: 'TRANSACTIONAL',
+          transaction,
+          projectId,
+        };
+        return await dataClient.commit(commitRequest);
+      }
+
+      it.only('run a transaction using the gapic client and some functions', async () => {
+        const key = 'Google';
+        const beginTransactionResponse = (await runBasicBeginTransaction())[0];
+        const lookupResponse = (
+          await runBasicLookupRequest(
+            key,
+            beginTransactionResponse?.transaction
+          )
+        )[0];
+        const commitResponse = runBasicCommitRequest(
+          key,
+          '2',
+          beginTransactionResponse?.transaction
+        );
+        console.log(lookupResponse);
+      });
+
+      it('run a transaction using the gapic client', async () => {
         // NOTE: THIS IS NOT HOW YOU WOULD USE THIS CODE
         // IT IS TO DEMONSTRATE THE BEHAVIOR OF THE GAPIC LAYER SO WE CAN PLAN
         // Begin the transaction
