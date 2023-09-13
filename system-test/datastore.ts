@@ -1504,6 +1504,64 @@ describe('Datastore', () => {
       // assert.deepStrictEqual(entity, obj);
     });
 
+    it.only('look at snapshot of data from begin transaction time', async () => {
+      const key = datastore.key(['Company', 'Google']);
+      const obj = {
+        url: 'www.google.com',
+      };
+      const url2 = 'www.google.com2';
+      const obj2 = {
+        url: url2,
+      };
+      // First do a transaction so that we have an id to provide in the next transaction
+      const transaction1 = datastore.transaction();
+      const startTime = new Date().getTime();
+      function printTimeElasped(label: string) {
+        console.log(`${label}: ${new Date().getTime() - startTime}`);
+      }
+      await datastore.save({key, data: obj});
+      printTimeElasped('Before begin transaction');
+      await transaction1.run();
+      printTimeElasped('After begin transaction');
+      await datastore.save({key, data: obj2});
+      printTimeElasped('After save');
+      const transactionFetchResults = await transaction1.get(key);
+      const regularFetchResults = await datastore.get(key);
+      assert.strictEqual(transactionFetchResults[0].url, url2);
+      assert.strictEqual(regularFetchResults[0].url, url2);
+      printTimeElasped('After fetch');
+      transaction1.save({key, data: obj});
+      printTimeElasped('After save');
+      const committedResults1 = await transaction1.commit();
+      printTimeElasped('After commit');
+      const [entity1] = await datastore.get(key);
+      delete entity1[datastore.KEY];
+      // Do a second transaction where we provide the id from the first transaction in the second transaction
+      const transaction = datastore.transaction();
+      const options = {
+        newTransaction: {
+          readWrite: {
+            previousTransaction: transaction1.id,
+          },
+        },
+      };
+      printTimeElasped('Before begin transaction');
+      printTimeElasped('After begin transaction');
+      await transaction.get(key, options);
+      printTimeElasped('After fetch');
+      if (transaction1.id && transaction.returnedTransaction) {
+        // Almost always not equal
+        assert.notEqual(transaction1.id[3], transaction.returnedTransaction[3]);
+      } else {
+        throw Error('transaction properties not defined');
+      }
+      const committedResults = await transaction.commit();
+      printTimeElasped('After commit');
+      const [entity] = await datastore.get(key);
+      // delete entity[datastore.KEY];
+      // assert.deepStrictEqual(entity, obj);
+    });
+
     it('should produce results when the transaction is committed', async () => {
       const key = datastore.key(['Company', 'Google']);
       const obj = {
@@ -2038,7 +2096,7 @@ describe('Datastore', () => {
         return await dataClient.commit(commitRequest);
       }
 
-      it.only('run a transaction using the gapic client and some functions', async () => {
+      it('run a transaction using the gapic client and some functions', async () => {
         const key = 'Google';
         const beginTransactionResponse = (await runBasicBeginTransaction())[0];
         const lookupResponse = (
