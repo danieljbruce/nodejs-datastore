@@ -1599,6 +1599,74 @@ describe('Datastore', () => {
       assert.deepStrictEqual(entity, obj);
     });
 
+    describe.only('transaction lock ordering', () => {
+      const key = datastore.key(['Company', 'Google']);
+      function getObj(url: string) {
+        return {
+          url,
+        };
+      }
+      it('commits out of order will work', async () => {
+        // passes
+        const transaction1 = datastore.transaction();
+        const transaction2 = datastore.transaction();
+        await transaction1.run();
+        await transaction2.run();
+        transaction1.save({key, data: getObj('www.google.com')});
+        transaction2.save({key, data: getObj('www.google2.com')});
+        await transaction2.commit();
+        await transaction1.commit();
+      });
+      it('passes when using transaction1.get first', async () => {
+        // passes
+        const transaction1 = datastore.transaction();
+        const transaction2 = datastore.transaction();
+        await transaction1.run();
+        await transaction2.run();
+        await transaction1.get(key);
+        transaction1.save({key, data: getObj('www.google.com')});
+        transaction2.save({key, data: getObj('www.google2.com')});
+        await transaction1.commit();
+        await transaction2.commit();
+      });
+      it('fails when using transaction2.get first', async () => {
+        // Error: 10 ABORTED: too much contention on these datastore entities. please try again.
+        const transaction1 = datastore.transaction();
+        const transaction2 = datastore.transaction();
+        await transaction1.run();
+        await transaction2.run();
+        await transaction2.get(key);
+        transaction1.save({key, data: getObj('www.google.com')});
+        transaction2.save({key, data: getObj('www.google2.com')});
+        await transaction1.commit();
+        await transaction2.commit();
+      });
+      it('fails when using transaction2.get first and runs reordered', async () => {
+        // Error: 10 ABORTED: too much contention on these datastore entities. please try again.
+        const transaction2 = datastore.transaction();
+        const transaction1 = datastore.transaction();
+        await transaction2.run();
+        await transaction1.run();
+        await transaction2.get(key);
+        transaction1.save({key, data: getObj('www.google.com')});
+        transaction2.save({key, data: getObj('www.google2.com')});
+        await transaction1.commit();
+        await transaction2.commit();
+      });
+      it.only('readOnly does not read from the beginning of the transaction', async () => {
+        // Error: 10 ABORTED: too much contention on these datastore entities. please try again.
+        const transaction2 = datastore.transaction({readOnly: true});
+        const transaction1 = datastore.transaction();
+        await datastore.save({key, data: getObj('www.google2.com')});
+        await transaction1.run();
+        await transaction2.run();
+        transaction1.save({key, data: getObj('www.google.com')});
+        await transaction1.commit();
+        const result = await transaction2.get(key);
+        assert.strictEqual(result[0].url, 'www.google.com');
+      });
+    });
+
     it('should commit all saves and deletes at the end', async () => {
       const deleteKey = datastore.key(['Company', 'Subway']);
       const key = datastore.key(['Company', 'Google']);
