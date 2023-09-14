@@ -1654,7 +1654,7 @@ describe('Datastore', () => {
         await transaction2.commit();
       });
       it.only('readOnly does not read from the beginning of the transaction', async () => {
-        // Error: 10 ABORTED: too much contention on these datastore entities. please try again.
+        // passes.
         const transaction2 = datastore.transaction({readOnly: true});
         const transaction1 = datastore.transaction();
         await datastore.save({key, data: getObj('www.google2.com')});
