@@ -1606,6 +1606,17 @@ describe('Datastore', () => {
           url,
         };
       }
+      it('commits in order will work', async () => {
+        // passes
+        const transaction1 = datastore.transaction();
+        const transaction2 = datastore.transaction();
+        await transaction1.run();
+        await transaction2.run();
+        transaction1.save({key, data: getObj('www.google.com')});
+        transaction2.save({key, data: getObj('www.google2.com')});
+        await transaction1.commit();
+        await transaction2.commit();
+      });
       it('commits out of order will work', async () => {
         // passes
         const transaction1 = datastore.transaction();
@@ -1662,7 +1673,6 @@ describe('Datastore', () => {
         await datastore.save({key, data: getObj('www.google2.com')});
         await transaction1.run();
         await transaction2.run();
-        const result2 = await transaction2.get(key);
         transaction1.save({key, data: getObj('www.google.com')});
         await transaction1.commit();
         const result = await transaction2.get(key);
