@@ -1653,17 +1653,35 @@ describe('Datastore', () => {
         await transaction1.commit();
         await transaction2.commit();
       });
-      it.only('readOnly does not read from the beginning of the transaction', async () => {
+      it('readOnly does not read from the beginning of the transaction', async () => {
         // passes.
-        const transaction2 = datastore.transaction({readOnly: true});
+        const transaction2 = datastore.transaction({
+          readOnly: true,
+        });
         const transaction1 = datastore.transaction();
         await datastore.save({key, data: getObj('www.google2.com')});
         await transaction1.run();
         await transaction2.run();
+        const result2 = await transaction2.get(key);
         transaction1.save({key, data: getObj('www.google.com')});
         await transaction1.commit();
         const result = await transaction2.get(key);
         assert.strictEqual(result[0].url, 'www.google.com');
+      });
+      it('readOnly reads from the first transaction read', async () => {
+        // passes.
+        const transaction2 = datastore.transaction({
+          readOnly: true,
+        });
+        const transaction1 = datastore.transaction();
+        await datastore.save({key, data: getObj('www.google2.com')});
+        await transaction1.run();
+        await transaction2.run();
+        const result2 = await transaction2.get(key);
+        transaction1.save({key, data: getObj('www.google.com')});
+        await transaction1.commit();
+        const result = await transaction2.get(key);
+        assert.strictEqual(result[0].url, 'www.google2.com');
       });
     });
 
