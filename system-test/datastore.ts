@@ -1599,7 +1599,7 @@ describe('Datastore', () => {
       assert.deepStrictEqual(entity, obj);
     });
 
-    describe.only('transaction lock ordering', () => {
+    describe('transaction lock ordering', () => {
       const key = datastore.key(['Company', 'Google']);
       function getObj(url: string) {
         return {
@@ -1680,18 +1680,35 @@ describe('Datastore', () => {
       });
       it('readOnly reads from the first transaction read', async () => {
         // passes.
+        const url2 = {url: 'www.google2.com'};
+        const url1 = {url: 'www.google.com'};
         const transaction2 = datastore.transaction({
           readOnly: true,
         });
         const transaction1 = datastore.transaction();
-        await datastore.save({key, data: getObj('www.google2.com')});
+        await datastore.save({key, data: url2});
         await transaction1.run();
         await transaction2.run();
         const result2 = await transaction2.get(key);
-        transaction1.save({key, data: getObj('www.google.com')});
+        transaction1.save({key, data: url1});
         await transaction1.commit();
         const result = await transaction2.get(key);
-        assert.strictEqual(result[0].url, 'www.google2.com');
+        assert.strictEqual(result[0].url, url2.url);
+      });
+      it.only('readOnly reads from the first transaction read snapshot', async () => {
+        // passes.
+        const urlBeforeWrite = {url: 'www.google2.com'};
+        const urlAfterWrite = {url: 'www.google.com'};
+        const transaction = datastore.transaction({
+          readOnly: true,
+        });
+        await datastore.save({key, data: urlBeforeWrite});
+        await transaction.run(); // Second assert fails if this is commented out.
+        const readBeforeWrite = await transaction.get(key);
+        assert.strictEqual(readBeforeWrite[0].url, urlBeforeWrite.url);
+        await datastore.save({key, data: urlAfterWrite});
+        const readAfterWrite = await transaction.get(key);
+        assert.strictEqual(readAfterWrite[0].url, urlBeforeWrite.url);
       });
     });
 
