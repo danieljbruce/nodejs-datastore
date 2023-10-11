@@ -1695,7 +1695,7 @@ describe('Datastore', () => {
         const result = await transaction2.get(key);
         assert.strictEqual(result[0].url, url2.url);
       });
-      it.only('readOnly reads from the first transaction read snapshot', async () => {
+      it('readOnly reads from the first transaction read snapshot', async () => {
         // passes.
         const urlBeforeWrite = {url: 'www.google2.com'};
         const urlAfterWrite = {url: 'www.google.com'};
@@ -1709,6 +1709,51 @@ describe('Datastore', () => {
         await datastore.save({key, data: urlAfterWrite});
         const readAfterWrite = await transaction.get(key);
         assert.strictEqual(readAfterWrite[0].url, urlBeforeWrite.url);
+      });
+      it.only('readOnly reads from the first transaction read snapshot (long form)', async () => {
+        // passes.
+        const path = ['Company', 'Google'];
+        const key = datastore.key(path);
+        const urlBefore = {url: '2.com'};
+        const urlAfter = {url: '1.com'};
+        // Constructor options
+        const o = {readOnly: true};
+        const txn = datastore.transaction(o);
+        const data = urlBefore;
+        const data1 = {key, data};
+        await datastore.save(data1);
+        await txn.run();
+        // Creates a snapshot
+        await txn.get(key);
+        const data2 = {key, data: urlAfter};
+        await datastore.save(data2);
+        const read = await txn.get(key);
+        const c1 = read[0].url;
+        const c2 = urlBefore.url;
+        assert.strictEqual(c1, c2);
+        await txn.commit();
+      });
+      it.only('readOnly reads from the first transaction read snapshot without run (long form)', async () => {
+        // passes.
+        const path = ['Company', 'Google'];
+        const key = datastore.key(path);
+        const urlBefore = {url: '2.com'};
+        const urlAfter = {url: '1.com'};
+        // Constructor options
+        const o = {readOnly: true};
+        const txn = datastore.transaction(o);
+        const data = urlBefore;
+        const data1 = {key, data};
+        await datastore.save(data1);
+        // Creates a snapshot
+        await txn.get(key);
+        const data2 = {key, data: urlAfter};
+        await datastore.save(data2);
+        const read = await txn.get(key);
+        const c1 = read[0].url;
+        const c2 = urlAfter.url;
+        assert.strictEqual(c1, c2);
+        await txn.commit();
       });
     });
 
