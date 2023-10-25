@@ -1882,7 +1882,7 @@ async.each(
             const readAfterWrite = await transaction.get(key);
             assert.strictEqual(readAfterWrite[0].url, urlBeforeWrite.url);
           });
-          it.only('readOnly reads from the first transaction read snapshot (long form)', async () => {
+          it('readOnly reads from the first transaction read snapshot (long form)', async () => {
             // passes.
             const path = ['Company', 'Google'];
             const key = datastore.key(path);
@@ -1905,7 +1905,7 @@ async.each(
             assert.strictEqual(c1, c2);
             await txn.commit();
           });
-          it.only('readOnly reads from the first transaction read snapshot without run (long form)', async () => {
+          it('readOnly reads from the first transaction read snapshot without run (long form)', async () => {
             // passes.
             const path = ['Company', 'Google'];
             const key = datastore.key(path);
@@ -1926,6 +1926,34 @@ async.each(
             const c2 = urlAfter.url;
             assert.strictEqual(c1, c2);
             await txn.commit();
+          });
+          describe('transaction promise ordering', () => {
+            const transaction = datastore.transaction();
+            async function promise1() {
+              await transaction.run();
+              const url1 = {url: '1.com'};
+              const data = url1;
+              const data1 = {key, data};
+              transaction.save(data1);
+              await transaction.commit();
+            }
+            async function promise2() {
+              await transaction.get(key);
+              const url2 = {url: '1.com'};
+              const data = url2;
+              const data2 = {key, data};
+              transaction.save(data2);
+              await transaction.commit();
+            }
+            // shows await Promise.all([promise1(), promise2()]); is unpredictable.
+            it('transaction promise in order', async () => {
+              await promise1();
+              await promise2();
+            });
+            it('transaction promise out of order', async () => {
+              await promise2();
+              await promise1();
+            });
           });
         });
 
