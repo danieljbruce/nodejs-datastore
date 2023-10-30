@@ -28,7 +28,7 @@ import {
   CommitResponse,
   DatastoreRequest,
   RequestOptions,
-  PrepareEntityObjectResponse,
+  PrepareEntityObjectResponse, CreateReadStreamOptions, GetResponse, GetCallback,
 } from './request';
 import {AggregateQuery} from './aggregate';
 
@@ -406,6 +406,31 @@ class Transaction extends DatastoreRequest {
       });
     });
   }
+
+  get(
+      keys: entity.Key | entity.Key[],
+      options?: CreateReadStreamOptions
+  ): Promise<GetResponse>;
+  get(keys: entity.Key | entity.Key[], callback: GetCallback): void;
+  get(
+      keys: entity.Key | entity.Key[],
+      options: CreateReadStreamOptions,
+      callback: GetCallback
+  ): void;
+  get(
+      keys: entity.Key | entity.Key[],
+      optionsOrCallback?: CreateReadStreamOptions | GetCallback,
+      cb?: GetCallback
+  ): void | Promise<GetResponse> {
+    const options =
+        typeof optionsOrCallback === 'object' && optionsOrCallback
+            ? optionsOrCallback
+            : {};
+    const callback =
+        typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
+    super.get(keys, options, callback);
+  }
+}
 
   /**
    * Maps to {@link https://cloud.google.com/nodejs/docs/reference/datastore/latest/datastore/transaction#_google_cloud_datastore_Transaction_save_member_1_|Datastore#save}, forcing the method to be `insert`.
