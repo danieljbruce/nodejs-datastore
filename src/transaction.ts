@@ -32,6 +32,13 @@ import {
 } from './request';
 import {AggregateQuery} from './aggregate';
 
+enum TransactionState {
+  NOT_TRANSACTION,
+  NOT_STARTED,
+  IN_PROGRESS, // Currently tracks the expired state as well
+  // TODO: Add expired? It might not be used in the
+}
+
 /**
  * A transaction is a set of Datastore operations on one or more entities. Each
  * transaction is guaranteed to be atomic, which means that transactions are
@@ -87,6 +94,8 @@ class Transaction extends DatastoreRequest {
 
     // Queue the requests to make when we send the transactional commit.
     this.requests_ = [];
+
+    this.state = TransactionState.NOT_STARTED;
   }
 
   /*! Developer Documentation
@@ -575,6 +584,7 @@ class Transaction extends DatastoreRequest {
           callback(err, null, resp);
           return;
         }
+        this.state = TransactionState.IN_PROGRESS;
         this.id = resp!.transaction;
         callback(null, this, resp);
       }
@@ -821,4 +831,4 @@ promisifyAll(Transaction, {
  * @name module:@google-cloud/datastore.Transaction
  * @see Transaction
  */
-export {Transaction};
+export {Transaction, TransactionState};
