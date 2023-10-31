@@ -23,7 +23,7 @@ import {google} from '../protos/protos';
 import {Datastore, TransactionOptions} from '.';
 import {entity, Entity, Entities} from './entity';
 import {Query} from './query';
-import {Mutex} from 'async-mutex';
+
 import {
   CommitCallback,
   CommitResponse,
@@ -33,15 +33,9 @@ import {
   CreateReadStreamOptions,
   GetResponse,
   GetCallback,
+  TransactionState,
 } from './request';
 import {AggregateQuery} from './aggregate';
-
-enum TransactionState {
-  NOT_TRANSACTION,
-  NOT_STARTED,
-  IN_PROGRESS, // Currently tracks the expired state as well
-  // TODO: Add expired? It might not be used in the
-}
 
 /**
  * A transaction is a set of Datastore operations on one or more entities. Each
@@ -69,8 +63,7 @@ class Transaction extends DatastoreRequest {
   request: Function;
   modifiedEntities_: ModifiedEntities;
   skipCommit?: boolean;
-  #state: TransactionState = TransactionState.NOT_TRANSACTION;
-  #mutex = new Mutex();
+
   constructor(datastore: Datastore, options?: TransactionOptions) {
     super();
     /**
@@ -102,6 +95,44 @@ class Transaction extends DatastoreRequest {
     this.requests_ = [];
 
     this.state = TransactionState.NOT_STARTED;
+  }
+
+  #begin(options: RunOptions, callback: RunCallback) {
+    const reqOpts = {
+      transactionOptions: {},
+    } as RequestOptions;
+
+    if (options.readOnly || this.readOnly) {
+      reqOpts.transactionOptions!.readOnly = {};
+    }
+
+    if (options.transactionId || this.id) {
+      reqOpts.transactionOptions!.readWrite = {
+        previousTransaction: options.transactionId || this.id,
+      };
+    }
+
+    if (options.transactionOptions) {
+      reqOpts.transactionOptions = options.transactionOptions;
+    }
+
+    this.request_(
+      {
+        client: 'DatastoreClient',
+        method: 'beginTransaction',
+        reqOpts,
+        gaxOpts: options.gaxOptions,
+      },
+      (err, resp) => {
+        if (err) {
+          callback(err, null, resp);
+          return;
+        }
+        this.state = TransactionState.IN_PROGRESS;
+        this.id = resp!.transaction;
+        callback(null, this, resp);
+      }
+    );
   }
 
   /*! Developer Documentation
@@ -413,30 +444,6 @@ class Transaction extends DatastoreRequest {
     });
   }
 
-  get(
-    keys: entity.Key | entity.Key[],
-    options?: CreateReadStreamOptions
-  ): Promise<GetResponse>;
-  get(keys: entity.Key | entity.Key[], callback: GetCallback): void;
-  get(
-    keys: entity.Key | entity.Key[],
-    options: CreateReadStreamOptions,
-    callback: GetCallback
-  ): void;
-  get(
-    keys: entity.Key | entity.Key[],
-    optionsOrCallback?: CreateReadStreamOptions | GetCallback,
-    cb?: GetCallback
-  ): void | Promise<GetResponse> {
-    const options =
-      typeof optionsOrCallback === 'object' && optionsOrCallback
-        ? optionsOrCallback
-        : {};
-    const callback =
-      typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
-    super.get(keys, options, callback);
-  }
-
   /**
    * Maps to {@link https://cloud.google.com/nodejs/docs/reference/datastore/latest/datastore/transaction#_google_cloud_datastore_Transaction_save_member_1_|Datastore#save}, forcing the method to be `insert`.
    *
@@ -579,46 +586,28 @@ class Transaction extends DatastoreRequest {
     optionsOrCallback?: RunOptions | RunCallback,
     cb?: RunCallback
   ): void | Promise<RunResponse> {
+    this.state = TransactionState.NOT_STARTED;
+    const state = this.state;
     const options =
       typeof optionsOrCallback === 'object' ? optionsOrCallback : {};
     const callback =
       typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
-
-    const reqOpts = {
-      transactionOptions: {},
-    } as RequestOptions;
-
-    if (options.readOnly || this.readOnly) {
-      reqOpts.transactionOptions!.readOnly = {};
-    }
-
-    if (options.transactionId || this.id) {
-      reqOpts.transactionOptions!.readWrite = {
-        previousTransaction: options.transactionId || this.id,
+    // TODO: See if we can eliminate the self = this;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    this.mutex.acquire().then(release => {
+      const beginCallback: RunCallback = (
+        error: Error | null,
+        transaction: Transaction | null,
+        response?: google.datastore.v1.IBeginTransactionResponse
+      ) => {
+        release();
+        callback(error, transaction, response);
       };
-    }
-
-    if (options.transactionOptions) {
-      reqOpts.transactionOptions = options.transactionOptions;
-    }
-
-    this.request_(
-      {
-        client: 'DatastoreClient',
-        method: 'beginTransaction',
-        reqOpts,
-        gaxOpts: options.gaxOptions,
-      },
-      (err, resp) => {
-        if (err) {
-          callback(err, null, resp);
-          return;
-        }
-        this.#state = TransactionState.IN_PROGRESS;
-        this.id = resp!.transaction;
-        callback(null, this, resp);
+      if (state === TransactionState.NOT_STARTED) {
+        self.#begin(options, beginCallback);
       }
-    );
+    });
   }
 
   /**
@@ -861,4 +850,4 @@ promisifyAll(Transaction, {
  * @name module:@google-cloud/datastore.Transaction
  * @see Transaction
  */
-export {Transaction, TransactionState};
+export {Transaction};
