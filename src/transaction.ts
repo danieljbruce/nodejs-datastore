@@ -23,6 +23,7 @@ import {google} from '../protos/protos';
 import {Datastore, TransactionOptions} from '.';
 import {entity, Entity, Entities} from './entity';
 import {Query} from './query';
+import {Mutex} from 'async-mutex';
 import {
   CommitCallback,
   CommitResponse,
@@ -65,6 +66,8 @@ class Transaction extends DatastoreRequest {
   request: Function;
   modifiedEntities_: ModifiedEntities;
   skipCommit?: boolean;
+  #state: TransactionState = TransactionState.NOT_TRANSACTION;
+  #mutex = new Mutex();
   constructor(datastore: Datastore, options?: TransactionOptions) {
     super();
     /**
@@ -430,7 +433,6 @@ class Transaction extends DatastoreRequest {
         typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
     super.get(keys, options, callback);
   }
-}
 
   /**
    * Maps to {@link https://cloud.google.com/nodejs/docs/reference/datastore/latest/datastore/transaction#_google_cloud_datastore_Transaction_save_member_1_|Datastore#save}, forcing the method to be `insert`.
@@ -609,7 +611,7 @@ class Transaction extends DatastoreRequest {
           callback(err, null, resp);
           return;
         }
-        this.state = TransactionState.IN_PROGRESS;
+        this.#state = TransactionState.IN_PROGRESS;
         this.id = resp!.transaction;
         callback(null, this, resp);
       }

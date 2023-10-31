@@ -90,7 +90,6 @@ class DatastoreRequest {
     | Array<(err: Error | null, resp: Entity | null) => void>
     | Entity;
   datastore!: Datastore;
-  protected state: TransactionState = TransactionState.NOT_TRANSACTION;
   [key: string]: Entity;
 
   /**
