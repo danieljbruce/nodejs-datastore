@@ -29,7 +29,10 @@ import {
   CommitResponse,
   DatastoreRequest,
   RequestOptions,
-  PrepareEntityObjectResponse, CreateReadStreamOptions, GetResponse, GetCallback,
+  PrepareEntityObjectResponse,
+  CreateReadStreamOptions,
+  GetResponse,
+  GetCallback,
 } from './request';
 import {AggregateQuery} from './aggregate';
 
@@ -411,26 +414,26 @@ class Transaction extends DatastoreRequest {
   }
 
   get(
-      keys: entity.Key | entity.Key[],
-      options?: CreateReadStreamOptions
+    keys: entity.Key | entity.Key[],
+    options?: CreateReadStreamOptions
   ): Promise<GetResponse>;
   get(keys: entity.Key | entity.Key[], callback: GetCallback): void;
   get(
-      keys: entity.Key | entity.Key[],
-      options: CreateReadStreamOptions,
-      callback: GetCallback
+    keys: entity.Key | entity.Key[],
+    options: CreateReadStreamOptions,
+    callback: GetCallback
   ): void;
   get(
-      keys: entity.Key | entity.Key[],
-      optionsOrCallback?: CreateReadStreamOptions | GetCallback,
-      cb?: GetCallback
+    keys: entity.Key | entity.Key[],
+    optionsOrCallback?: CreateReadStreamOptions | GetCallback,
+    cb?: GetCallback
   ): void | Promise<GetResponse> {
     const options =
-        typeof optionsOrCallback === 'object' && optionsOrCallback
-            ? optionsOrCallback
-            : {};
+      typeof optionsOrCallback === 'object' && optionsOrCallback
+        ? optionsOrCallback
+        : {};
     const callback =
-        typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
+      typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
     super.get(keys, options, callback);
   }
 
