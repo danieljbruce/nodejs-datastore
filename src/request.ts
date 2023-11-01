@@ -99,6 +99,7 @@ class DatastoreRequest {
     | Array<(err: Error | null, resp: Entity | null) => void>
     | Entity;
   datastore!: Datastore;
+  // TODO: consider moving these down to the transaction class.
   protected mutex = new Mutex();
   protected state: TransactionState = TransactionState.NOT_TRANSACTION;
   [key: string]: Entity;
