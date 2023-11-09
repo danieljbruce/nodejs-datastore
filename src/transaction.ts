@@ -523,24 +523,8 @@ class Transaction extends DatastoreRequest {
       typeof optionsOrCallback === 'object' ? optionsOrCallback : {};
     const callback =
       typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
-    // TODO: Whenever run is called a second time and a warning is emitted then do nothing.
-    // TODO: This means rewriting many tests so that they don't use the same transaction object.
-    if (this.#state !== TransactionState.NOT_STARTED) {
-      process.emitWarning(
-        'run has already been called and should not be called again.'
-      );
-    }
-    this.#mutex.acquire().then(release => {
-      this.runAsync(options)
-        .then((response: RequestPromiseReturnType) => {
-          // TODO: Probably release the mutex after the id is recorded, but likely doesn't matter since node is single threaded.
-          release();
-          this.#parseRunAsync(response, callback);
-        })
-        .catch((err: any) => {
-          // TODO: Remove this catch block
-          callback(Error('The error should always be caught by then'), this);
-        });
+    this.#runAsync(options).then((response: RequestPromiseReturnType) => {
+      this.#processBeginResults(response, callback);
     });
   }
 
@@ -672,8 +656,16 @@ class Transaction extends DatastoreRequest {
     );
   }
 
-  // TODO: Replace with #parseRunAsync when pack and play error is gone
-  #parseRunAsync(
+  /**
+   * This function parses results from a beginTransaction call
+   *
+   * @param {RequestPromiseReturnType} response The response from a call to
+   * begin a transaction.
+   * @param {RunCallback} callback A callback that accepts an error and a
+   * response as arguments.
+   *
+   **/
+  #processBeginResults(
     response: RequestPromiseReturnType,
     callback: RunCallback
   ): void {
@@ -681,10 +673,10 @@ class Transaction extends DatastoreRequest {
     const resp = response.resp;
     if (err) {
       callback(err, null, resp);
-      return;
+    } else {
+      this.#parseRunSuccess(response);
+      callback(null, this, resp);
     }
-    this.#parseRunSuccess(response);
-    callback(null, this, resp);
   }
 
   #parseRunSuccess(response: RequestPromiseReturnType) {
@@ -693,10 +685,16 @@ class Transaction extends DatastoreRequest {
     this.#state = TransactionState.IN_PROGRESS;
   }
 
-  // TODO: Replace with #runAsync when pack and play error is gone
-  private async runAsync(
-    options: RunOptions
-  ): Promise<RequestPromiseReturnType> {
+  /**
+   * This async function makes a beginTransaction call and returns a promise with
+   * the information returned from the call that was made.
+   *
+   * @param {RunOptions} options The options used for a beginTransaction call.
+   * @returns {Promise<RequestPromiseReturnType>}
+   *
+   *
+   **/
+  async #runAsync(options: RunOptions): Promise<RequestPromiseReturnType> {
     const reqOpts: RequestOptions = {
       transactionOptions: {},
     };
@@ -724,8 +722,7 @@ class Transaction extends DatastoreRequest {
           reqOpts,
           gaxOpts: options.gaxOptions,
         },
-        // In original functionality sometimes a response is provided when an error is also provided
-        // reject only allows us to pass back an error so use resolve for both error and non-error cases.
+        // Always use resolve because then this function can return both the error and the response
         (err, resp) => {
           resolve({
             err,
@@ -967,6 +964,7 @@ promisifyAll(Transaction, {
     'createQuery',
     'delete',
     'insert',
+    '#runAsync',
     'parseRunAsync',
     'parseTransactionResponse',
     'runAsync',
