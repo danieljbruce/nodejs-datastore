@@ -69,6 +69,7 @@ const fakePfy = Object.assign({}, pfy, {
       'save',
       'update',
       'upsert',
+      '#withBeginTransaction',
     ]);
   },
 });
@@ -284,7 +285,7 @@ async.each(
               response?: google.datastore.v1.IBeginTransactionResponse
             ) => {
               assert.strictEqual(error, null);
-              assert.strictEqual(response, testRunResp);
+              assert.deepStrictEqual(response, testRunResp);
               assert.strictEqual(transaction, transactionWithoutMock);
               done();
             };
@@ -665,7 +666,6 @@ async.each(
         });
       });
 
-      // TODO: Add a test here for calling commit
       describe('various functions without setting up transaction id when run returns a response', () => {
         // These tests were created so that when transaction.run is restructured we
         // can be confident that it works the same way as before.
@@ -673,6 +673,9 @@ async.each(
           transaction: Buffer.from(Array.from(Array(100).keys())),
         };
 
+        // MockedTransactionWrapper is a helper class for mocking out various
+        // Gapic functions and ensuring that responses and errors actually make it
+        // back to the user.
         class MockedTransactionWrapper {
           datastore: Datastore;
           transaction: Transaction;
@@ -680,6 +683,7 @@ async.each(
           mockedBeginTransaction: any;
           mockedFunction: any; // TODO: replace with type
           functionsMocked: {name: string; mockedFunction: any}[];
+          callBackSignaler: (callbackReached: string) => void = () => {};
 
           constructor() {
             const namespace = 'run-without-mock';
@@ -720,6 +724,9 @@ async.each(
                   {} | null | undefined
                 >
               ) => {
+                // Calls a user provided function that will receive this string
+                // Usually used to track when this code was reached relative to other code
+                this.callBackSignaler('beginTransaction called');
                 callback(null, testRunResp);
               };
             }
@@ -727,13 +734,22 @@ async.each(
             this.functionsMocked = [];
             this.datastore = datastore;
           }
+
+          // This mocks out a gapic function to just call the callback received in the Gapic function.
+          // The callback will send back the error and response arguments provided as parameters.
           mockGapicFunction<ResponseType>(
             functionName: string,
             response: ResponseType,
             error: Error | null
           ) {
             const dataClient = this.dataClient;
-            // TODO: Check here that function hasn't been mocked out already
+            // Check here that function hasn't been mocked out already
+            // Ensures that this mocking object is not being misused.
+            this.functionsMocked.forEach(fn => {
+              if (fn.name === functionName) {
+                throw Error(`${functionName} has already been mocked out`);
+              }
+            });
             if (dataClient && dataClient[functionName]) {
               this.functionsMocked.push({
                 name: functionName,
@@ -753,17 +769,22 @@ async.each(
                   {} | null | undefined
                 >
               ) => {
+                this.callBackSignaler(`${functionName} called`);
                 callback(error, response);
               };
             }
           }
 
+          // This resets beginTransaction from the Gapic layer to what it originally was.
+          // Resetting beginTransaction ensures other tests don't use the beginTransaction mock.
           resetBeginTransaction() {
             if (this.dataClient && this.dataClient.beginTransaction) {
               this.dataClient.beginTransaction = this.mockedBeginTransaction;
             }
           }
-          // TODO: Allow several functions to be mocked, eliminate string parameter
+
+          // This resets Gapic functions mocked out by the tests to what they originally were.
+          // Resetting mocked out Gapic functions ensures other tests don't use these mocks.
           resetGapicFunctions() {
             this.functionsMocked.forEach(functionMocked => {
               this.dataClient[functionMocked.name] =
@@ -1219,10 +1240,179 @@ async.each(
             });
           });
         });
+        describe('concurrency', async () => {
+          const testCommitResp = {
+            mutationResults: [
+              {
+                key: {
+                  path: [
+                    {
+                      kind: 'some-kind',
+                    },
+                  ],
+                },
+              },
+            ],
+          };
+          let transactionWrapper: MockedTransactionWrapper;
+
+          beforeEach(async () => {
+            transactionWrapper = new MockedTransactionWrapper();
+          });
+
+          afterEach(() => {
+            transactionWrapper.resetBeginTransaction();
+            transactionWrapper.resetGapicFunctions();
+          });
+
+          // This object is used for testing the order that different events occur
+          // The events can include
+          class TransactionOrderTester {
+            expectedOrder: string[] = [];
+            callbackOrder: string[] = [];
+            transactionWrapper: MockedTransactionWrapper;
+            done: (err?: any) => void;
+            checkForCompletion() {
+              if (this.callbackOrder.length >= this.expectedOrder.length) {
+                try {
+                  // TODO: assertion check here
+                  assert.deepStrictEqual(
+                    this.callbackOrder,
+                    this.expectedOrder
+                  );
+                  this.done();
+                } catch (e) {
+                  this.done(e);
+                }
+              }
+            }
+
+            runCallback: RunCallback = (
+              error: Error | null | undefined,
+              response?: any
+            ) => {
+              try {
+                this.callbackOrder.push('run callback');
+                this.checkForCompletion();
+              } catch (e) {
+                this.done(e);
+              }
+            };
+            commitCallback: CommitCallback = (
+              error: Error | null | undefined,
+              response?: google.datastore.v1.ICommitResponse
+            ) => {
+              try {
+                this.callbackOrder.push('commit callback');
+                this.checkForCompletion();
+              } catch (e) {
+                this.done(e);
+              }
+            };
+
+            constructor(
+              transactionWrapper: MockedTransactionWrapper,
+              done: (err?: any) => void,
+              expectedOrder: string[]
+            ) {
+              this.expectedOrder = expectedOrder;
+              const gapicCallHandler = (call: string) => {
+                try {
+                  this.callbackOrder.push(call);
+                  this.checkForCompletion();
+                } catch (e) {
+                  done(e);
+                }
+              };
+              this.done = done;
+              transactionWrapper.callBackSignaler = gapicCallHandler;
+              this.transactionWrapper = transactionWrapper;
+            }
+
+            callRun() {
+              this.transactionWrapper.transaction.run(this.runCallback);
+            }
+
+            callCommit() {
+              this.transactionWrapper.transaction.commit(this.commitCallback);
+            }
+
+            pushString(callbackPushed: string) {
+              this.callbackOrder.push(callbackPushed);
+              this.checkForCompletion();
+            }
+          }
+
+          describe('should pass response back to the user', async () => {
+            beforeEach(() => {
+              transactionWrapper.mockGapicFunction(
+                'commit',
+                testCommitResp,
+                null
+              );
+            });
+
+            it('should call the callbacks in the proper order with run and commit', done => {
+              const transactionOrderTester = new TransactionOrderTester(
+                transactionWrapper,
+                done,
+                [
+                  'functions called',
+                  'beginTransaction called',
+                  'run callback',
+                  'commit called',
+                  'commit callback',
+                ]
+              );
+              transactionOrderTester.callRun();
+              transactionOrderTester.callCommit();
+              transactionOrderTester.pushString('functions called');
+            });
+            it('should call the callbacks in the proper order with commit', done => {
+              const transactionOrderTester = new TransactionOrderTester(
+                transactionWrapper,
+                done,
+                [
+                  'functions called',
+                  'beginTransaction called',
+                  'commit called',
+                  'commit callback',
+                ]
+              );
+              transactionOrderTester.callCommit();
+              transactionOrderTester.pushString('functions called');
+            });
+            it('should call the callbacks in the proper order with two run calls', done => {
+              const transactionOrderTester = new TransactionOrderTester(
+                transactionWrapper,
+                done,
+                [
+                  'functions called',
+                  'beginTransaction called',
+                  'run callback',
+                  'run callback',
+                ]
+              );
+              transactionOrderTester.callRun();
+              transactionOrderTester.callRun();
+              transactionOrderTester.pushString('functions called');
+            });
+          });
+        });
       });
       describe('commit', () => {
-        beforeEach(() => {
+        beforeEach(done => {
           transaction.id = TRANSACTION_ID;
+          transaction.request_ = (config, callback) => {
+            callback(null, {
+              transaction: Buffer.from(Array.from(Array(100).keys())),
+            });
+            // Delay to give the transaction mutex the opportunity to unlock before running tests.
+            setImmediate(() => {
+              done();
+            });
+          };
+          transaction.run();
         });
 
         afterEach(() => {

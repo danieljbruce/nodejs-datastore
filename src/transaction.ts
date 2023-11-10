@@ -22,26 +22,52 @@ import {google} from '../protos/protos';
 
 import {Datastore, TransactionOptions} from '.';
 import {entity, Entity, Entities} from './entity';
-import {Query} from './query';
+import {
+  Query,
+  RunQueryCallback,
+  RunQueryInfo,
+  RunQueryOptions,
+  RunQueryResponse,
+} from './query';
 import {
   CommitCallback,
   CommitResponse,
   DatastoreRequest,
   RequestOptions,
   PrepareEntityObjectResponse,
+  CreateReadStreamOptions,
+  GetResponse,
+  GetCallback,
+  RequestCallback,
 } from './request';
 import {AggregateQuery} from './aggregate';
+import {Mutex} from 'async-mutex';
 
-// RequestPromiseReturnType should line up with the types in RequestCallback
-interface RequestPromiseReturnType {
+type RunQueryResponseOptional = [
+  Entity[] | undefined,
+  RunQueryInfo | undefined,
+];
+interface PassThroughReturnType<T> {
   err?: Error | null;
-  resp: any; // TODO: Replace with google.datastore.v1.IBeginTransactionResponse and address downstream issues
+  resp?: T;
 }
-interface RequestResolveFunction {
-  (callbackData: RequestPromiseReturnType): void;
+interface RequestResolveFunction<T> {
+  (callbackData: PassThroughReturnType<T>): void;
 }
-interface RequestAsPromiseCallback {
-  (resolve: RequestResolveFunction): void;
+interface RequestAsPromiseCallback<T> {
+  (resolve: RequestResolveFunction<T>): void;
+}
+interface ResolverType<T> {
+  (
+    resolve: (
+      value: PassThroughReturnType<T> | PromiseLike<PassThroughReturnType<T>>
+    ) => void
+  ): void;
+}
+
+enum TransactionState {
+  NOT_STARTED,
+  IN_PROGRESS, // IN_PROGRESS currently tracks the expired state as well
 }
 
 /**
@@ -70,6 +96,8 @@ class Transaction extends DatastoreRequest {
   request: Function;
   modifiedEntities_: ModifiedEntities;
   skipCommit?: boolean;
+  #mutex = new Mutex();
+  #state = TransactionState.NOT_STARTED;
   constructor(datastore: Datastore, options?: TransactionOptions) {
     super();
     /**
@@ -161,7 +189,50 @@ class Transaction extends DatastoreRequest {
         : () => {};
     const gaxOptions =
       typeof gaxOptionsOrCallback === 'object' ? gaxOptionsOrCallback : {};
-    this.runCommit(gaxOptions, callback);
+    type commitPromiseType =
+      PassThroughReturnType<google.datastore.v1.ICommitResponse>;
+    const resolver: ResolverType<
+      google.datastore.v1.ICommitResponse
+    > = resolve => {
+      this.#runCommit(
+        gaxOptions,
+        (err?: Error | null, resp?: google.datastore.v1.ICommitResponse) => {
+          resolve({err, resp});
+        }
+      );
+    };
+    this.#withBeginTransaction(gaxOptions, resolver).then(
+      (response: commitPromiseType) => {
+        callback(response.err, response.resp);
+      }
+    );
+  }
+
+  async #withBeginTransaction<T>(
+    gaxOptions: CallOptions | undefined,
+    resolver: (
+      resolve: (
+        value: PassThroughReturnType<T> | PromiseLike<PassThroughReturnType<T>>
+      ) => void
+    ) => void
+  ): Promise<PassThroughReturnType<T>> {
+    if (this.#state === TransactionState.NOT_STARTED) {
+      const release = await this.#mutex.acquire();
+      try {
+        try {
+          if (this.#state === TransactionState.NOT_STARTED) {
+            const runResults = await this.#runAsync({gaxOptions});
+            this.#parseRunSuccess(runResults);
+          }
+        } finally {
+          release();
+        }
+      } catch (err: any) {
+        return {err};
+      }
+    }
+    const promiseResults = await new Promise(resolver);
+    return promiseResults;
   }
 
   /**
@@ -298,6 +369,40 @@ class Transaction extends DatastoreRequest {
         args: [ent],
       });
     });
+  }
+
+  get(
+    keys: entity.Key | entity.Key[],
+    options?: CreateReadStreamOptions
+  ): Promise<GetResponse>;
+  get(keys: entity.Key | entity.Key[], callback: GetCallback): void;
+  get(
+    keys: entity.Key | entity.Key[],
+    options: CreateReadStreamOptions,
+    callback: GetCallback
+  ): void;
+  get(
+    keys: entity.Key | entity.Key[],
+    optionsOrCallback?: CreateReadStreamOptions | GetCallback,
+    cb?: GetCallback
+  ): void | Promise<GetResponse> {
+    const options =
+      typeof optionsOrCallback === 'object' && optionsOrCallback
+        ? optionsOrCallback
+        : {};
+    const callback =
+      typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
+    type promiseType = PassThroughReturnType<GetResponse>;
+    const resolver: ResolverType<GetResponse> = resolve => {
+      super.get(keys, options, (err?: Error | null, resp?: GetResponse) => {
+        resolve({err, resp});
+      });
+    };
+    this.#withBeginTransaction(options.gaxOptions, resolver).then(
+      (response: promiseType) => {
+        callback(response.err, response.resp);
+      }
+    );
   }
 
   /**
@@ -446,15 +551,49 @@ class Transaction extends DatastoreRequest {
       typeof optionsOrCallback === 'object' ? optionsOrCallback : {};
     const callback =
       typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
-    this.#runAsync(options).then((response: RequestPromiseReturnType) => {
-      this.#processBeginResults(response, callback);
-    });
+    const runIfStarted = () => {
+      process.emitWarning(
+        'run has already been called and should not be called again.'
+      );
+      callback(null, this, {transaction: this.id});
+    };
+    if (this.#state !== TransactionState.NOT_STARTED) {
+      runIfStarted();
+    } else {
+      this.#mutex.acquire().then(release => {
+        if (this.#state === TransactionState.NOT_STARTED) {
+          this.#runAsync(options).then(
+            (
+              response: PassThroughReturnType<google.datastore.v1.IBeginTransactionResponse>
+            ) => {
+              release();
+              this.#processBeginResults(response, callback);
+            }
+          );
+        } else {
+          release();
+          runIfStarted();
+        }
+      });
+    }
   }
 
-  private runCommit(
-    gaxOptions: CallOptions,
-    callback: CommitCallback
+  #runCommit(gaxOptions?: CallOptions): Promise<CommitResponse>;
+  #runCommit(callback: CommitCallback): void;
+  #runCommit(gaxOptions: CallOptions, callback: CommitCallback): void;
+  #runCommit(
+    gaxOptionsOrCallback?: CallOptions | CommitCallback,
+    cb?: CommitCallback
   ): void | Promise<CommitResponse> {
+    const callback =
+      typeof gaxOptionsOrCallback === 'function'
+        ? gaxOptionsOrCallback
+        : typeof cb === 'function'
+        ? cb
+        : () => {};
+    const gaxOptions =
+      typeof gaxOptionsOrCallback === 'object' ? gaxOptionsOrCallback : {};
+
     if (this.skipCommit) {
       setImmediate(callback);
       return;
@@ -570,14 +709,14 @@ class Transaction extends DatastoreRequest {
   /**
    * This function parses results from a beginTransaction call
    *
-   * @param {RequestPromiseReturnType} response The response from a call to
+   * @param {RequestPromiseReturnType} [response] The response from a call to
    * begin a transaction.
-   * @param {RunCallback} callback A callback that accepts an error and a
+   * @param {RunCallback} [callback] A callback that accepts an error and a
    * response as arguments.
    *
    **/
   #processBeginResults(
-    response: RequestPromiseReturnType,
+    response: PassThroughReturnType<google.datastore.v1.IBeginTransactionResponse>,
     callback: RunCallback
   ): void {
     const err = response.err;
@@ -585,9 +724,22 @@ class Transaction extends DatastoreRequest {
     if (err) {
       callback(err, null, resp);
     } else {
-      this.id = resp!.transaction;
+      this.#parseRunSuccess(response);
       callback(null, this, resp);
     }
+  }
+
+  /**
+   * This function saves results from a successful beginTransaction call.
+   *
+   * @param {PassThroughReturnType<any>} [response] The response from a call to
+   * begin a transaction that completed successfully.
+   *
+   **/
+  #parseRunSuccess(response: PassThroughReturnType<any>) {
+    const resp = response.resp;
+    this.id = resp!.transaction;
+    this.#state = TransactionState.IN_PROGRESS;
   }
 
   /**
@@ -599,7 +751,7 @@ class Transaction extends DatastoreRequest {
    *
    *
    **/
-  async #runAsync(options: RunOptions): Promise<RequestPromiseReturnType> {
+  async #runAsync(options: RunOptions): Promise<PassThroughReturnType<any>> {
     const reqOpts: RequestOptions = {
       transactionOptions: {},
     };
@@ -617,8 +769,8 @@ class Transaction extends DatastoreRequest {
     if (options.transactionOptions) {
       reqOpts.transactionOptions = options.transactionOptions;
     }
-    const promiseFunction: RequestAsPromiseCallback = (
-      resolve: RequestResolveFunction
+    const promiseFunction: RequestAsPromiseCallback<any> = (
+      resolve: RequestResolveFunction<any>
     ) => {
       this.request_(
         {
@@ -637,6 +789,83 @@ class Transaction extends DatastoreRequest {
       );
     };
     return new Promise(promiseFunction);
+  }
+
+  runAggregationQuery(
+    query: AggregateQuery,
+    options?: RunQueryOptions
+  ): Promise<RunQueryResponse>;
+  runAggregationQuery(
+    query: AggregateQuery,
+    options: RunQueryOptions,
+    callback: RequestCallback
+  ): void;
+  runAggregationQuery(query: AggregateQuery, callback: RequestCallback): void;
+  runAggregationQuery(
+    query: AggregateQuery,
+    optionsOrCallback?: RunQueryOptions | RequestCallback,
+    cb?: RequestCallback
+  ): void | Promise<RunQueryResponse> {
+    const options =
+      typeof optionsOrCallback === 'object' && optionsOrCallback
+        ? optionsOrCallback
+        : {};
+    const callback =
+      typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
+    type promiseType = PassThroughReturnType<PassThroughReturnType<any>>;
+    const resolver: ResolverType<any> = resolve => {
+      super.runAggregationQuery(
+        query,
+        options,
+        (err?: Error | null, resp?: any) => {
+          resolve({err, resp});
+        }
+      );
+    };
+    this.#withBeginTransaction(options.gaxOptions, resolver).then(
+      (response: promiseType) => {
+        const error = response.err ? response.err : null;
+        callback(error, response.resp);
+      }
+    );
+  }
+
+  runQuery(query: Query, options?: RunQueryOptions): Promise<RunQueryResponse>;
+  runQuery(
+    query: Query,
+    options: RunQueryOptions,
+    callback: RunQueryCallback
+  ): void;
+  runQuery(query: Query, callback: RunQueryCallback): void;
+  runQuery(
+    query: Query,
+    optionsOrCallback?: RunQueryOptions | RunQueryCallback,
+    cb?: RunQueryCallback
+  ): void | Promise<RunQueryResponse> {
+    const options =
+      typeof optionsOrCallback === 'object' && optionsOrCallback
+        ? optionsOrCallback
+        : {};
+    const callback =
+      typeof optionsOrCallback === 'function' ? optionsOrCallback : cb!;
+    type promiseType = PassThroughReturnType<RunQueryResponseOptional>;
+    const resolver: ResolverType<RunQueryResponseOptional> = resolve => {
+      super.runQuery(
+        query,
+        options,
+        (err: Error | null, entities?: Entity[], info?: RunQueryInfo) => {
+          resolve({err, resp: [entities, info]});
+        }
+      );
+    };
+    this.#withBeginTransaction(options.gaxOptions, resolver).then(
+      (response: promiseType) => {
+        const error = response.err ? response.err : null;
+        const entities = response.resp ? response.resp[0] : undefined;
+        const info = response.resp ? response.resp[1] : undefined;
+        callback(error, entities, info);
+      }
+    );
   }
 
   /**
@@ -872,6 +1101,7 @@ promisifyAll(Transaction, {
     'save',
     'update',
     'upsert',
+    '#withBeginTransaction',
   ],
 });
 

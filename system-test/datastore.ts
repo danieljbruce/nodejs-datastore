@@ -1870,12 +1870,11 @@ async.each(
               .count('total');
             let result;
             try {
+              const allResults = await aggregateQuery.run();
               [result] = await aggregateQuery.run();
             } catch (e) {
               await transaction.rollback();
-              assert.fail(
-                'The aggregation query run should have been successful'
-              );
+              throw e;
             }
             assert.deepStrictEqual(result, [{total: 2}]);
             await transaction.commit();
@@ -1892,9 +1891,7 @@ async.each(
               [result] = await aggregateQuery.run();
             } catch (e) {
               await transaction.rollback();
-              assert.fail(
-                'The aggregation query run should have been successful'
-              );
+              throw e;
             }
             assert.deepStrictEqual(result, [{'total rating': 200}]);
             await transaction.commit();
@@ -1911,9 +1908,7 @@ async.each(
               [result] = await aggregateQuery.run();
             } catch (e) {
               await transaction.rollback();
-              assert.fail(
-                'The aggregation query run should have been successful'
-              );
+              throw e;
             }
             assert.deepStrictEqual(result, [{'average rating': 100}]);
             await transaction.commit();
@@ -1929,9 +1924,7 @@ async.each(
                 [result] = await aggregateQuery.run();
               } catch (e) {
                 await transaction.rollback();
-                assert.fail(
-                  'The aggregation query run should have been successful'
-                );
+                throw e;
               }
               return result;
             }
