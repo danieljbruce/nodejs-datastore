@@ -1927,6 +1927,22 @@ async.each(
             assert.strictEqual(c1, c2);
             await txn.commit();
           });
+          it.only('first snapshot begins on first read not on begin transaction', async () => {
+            // This test fails. finalRead has onClientSave.com data
+            const path = ['Company', 'Google'];
+            const key = datastore.key(path);
+            await datastore.save({key, data: {url: 'beforeEverything.com'}});
+            const initialState = await datastore.get(key);
+            const txn = datastore.transaction();
+            await txn.run(); // Makes sure txn is started, with new changes will run in .save if this line is omitted.
+            // write inside of transaction
+            txn.save({key, data: {url: 'onTxWrite.com'}});
+            // write outside transaction
+            await datastore.save({key, data: {url: 'onClientSave.com'}});
+            // read inside transaction
+            const finalRead = await txn.get(key);
+            assert.deepStrictEqual(initialState, finalRead);
+          });
           describe('transaction promise ordering', () => {
             const transaction = datastore.transaction();
             async function promise1() {
