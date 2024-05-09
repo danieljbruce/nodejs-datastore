@@ -244,7 +244,103 @@ async.each(
           assert.deepStrictEqual(entity, data);
           await datastore.delete(postKey);
         });
-
+        it('try the gapic client directly - fails with invalid error', async () => {
+          // Fails with 'Error: 3 INVALID_ARGUMENT: The value of property "value" is longer than 1500 bytes.'
+          const postKey = datastore.key(['Post', 'post3']);
+          const longString = Buffer.alloc(1501, '.').toString();
+          const [entity] = await datastore.get(postKey);
+          const dataClient = datastore.clients_.get('DatastoreClient');
+          assert(dataClient);
+          await dataClient.commit({
+            mutations: [
+              {
+                upsert: {
+                  properties: {
+                    field_a: {
+                      stringValue: longString,
+                      excludeFromIndexes: true,
+                    },
+                    field_b: {
+                      entityValue: {
+                        properties: {
+                          name: {
+                            stringValue: 'nestedValue',
+                          },
+                          value: {
+                            stringValue: longString,
+                          },
+                          excludeFromIndexes: {
+                            boolean: true,
+                          },
+                        },
+                      },
+                      excludeFromIndexes: true,
+                    },
+                  },
+                  key: {
+                    path: [
+                      {
+                        kind: 'Post',
+                        name: 'post2',
+                      },
+                    ],
+                    partitionId: {
+                      namespaceId: '1715263458131',
+                    },
+                  },
+                },
+              },
+            ],
+            mode: 'NON_TRANSACTIONAL',
+            projectId: 'cloud-native-db-dpes-shared',
+          });
+        });
+        it('try the gapic client directly', async () => {
+          // Fails with 'Error: 3 INVALID_ARGUMENT: The value of property "value" is longer than 1500 bytes.'
+          const postKey = datastore.key(['Post', 'post3']);
+          const longString = Buffer.alloc(1501, '.').toString();
+          const [entity] = await datastore.get(postKey);
+          const dataClient = datastore.clients_.get('DatastoreClient');
+          assert(dataClient);
+          await dataClient.commit({
+            mutations: [
+              {
+                upsert: {
+                  properties: {
+                    field_a: {
+                      stringValue: longString,
+                      excludeFromIndexes: true,
+                    },
+                    field_b: {
+                      entityValue: {
+                        properties: {
+                          nestedField: {
+                            stringValue: longString,
+                            excludeFromIndexes: true,
+                          },
+                        },
+                      },
+                      excludeFromIndexes: true,
+                    },
+                  },
+                  key: {
+                    path: [
+                      {
+                        kind: 'Post',
+                        name: 'post2',
+                      },
+                    ],
+                    partitionId: {
+                      namespaceId: '1715263458131',
+                    },
+                  },
+                },
+              },
+            ],
+            mode: 'NON_TRANSACTIONAL',
+            projectId: 'cloud-native-db-dpes-shared',
+          });
+        });
         it.only('should auto remove index with excludeLargeProperties enabled', async () => {
           const longString = Buffer.alloc(1501, '.').toString();
           const postKey = datastore.key(['Post', 'post2']);
@@ -297,8 +393,7 @@ async.each(
             {
               name: 'field_b',
               value: {
-                name: 'nestedField',
-                value: Buffer.alloc(1501, '.').toString(),
+                nestedField: Buffer.alloc(1501, '.').toString(),
               },
               excludeFromIndexes: true,
             },
