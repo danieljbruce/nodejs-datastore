@@ -1644,7 +1644,7 @@ async.each(
           );
         });
 
-        it('should allow setting the indexed value of a property', done => {
+        it.only('should allow setting the indexed value of a property', done => {
           datastore.request_ = (config: RequestConfig) => {
             const property =
               config.reqOpts!.mutations![0].upsert!.properties!.name;

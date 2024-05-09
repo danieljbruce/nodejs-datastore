@@ -1124,6 +1124,7 @@ class Datastore extends DatastoreRequest {
         // @TODO remove in @google-cloud/datastore@2.0.0
         // This was replaced with a more efficient mechanism in the top-level
         // `excludeFromIndexes` option.
+        /*
         if (Array.isArray(entityObject.data)) {
           entityProto.properties = entityObject.data.reduce(
             (
@@ -1158,7 +1159,8 @@ class Datastore extends DatastoreRequest {
         } else {
           entityProto = entity.entityToEntityProto(entityObject);
         }
-
+        */
+        entityProto = entity.entityToEntityProto(entityObject);
         entityProto.key = entity.keyToKeyProto(entityObject.key);
 
         mutation[method] = entityProto;
