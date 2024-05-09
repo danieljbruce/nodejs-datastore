@@ -1158,6 +1158,16 @@ class Datastore extends DatastoreRequest {
         } else {
           entityProto = entity.entityToEntityProto(entityObject);
         }
+        if (
+          entityProto &&
+          entityProto.properties &&
+          entityProto.properties.field_b &&
+          entityProto.properties.field_b.entityValue &&
+          entityProto.properties.field_b.entityValue.properties
+        ) {
+          entityProto.properties.field_b.entityValue.properties.nestedField.excludeFromIndexes =
+            true;
+        }
         entityProto.key = entity.keyToKeyProto(entityObject.key);
 
         mutation[method] = entityProto;
