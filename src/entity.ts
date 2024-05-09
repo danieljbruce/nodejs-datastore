@@ -989,14 +989,21 @@ export namespace entity {
             Buffer.from(entry.value).length > MAX_DATASTORE_VALUE_LENGTH
           ) {
             entry.excludeFromIndexes = true;
-          } else {
-            continue;
           }
         }
         findLargeProperties_(entry, path.concat('[]'), properties);
       }
     } else if (is.object(entities)) {
       const keys = Object.keys(entities);
+      // if isString(entities.value) here
+      if (entities && entities.name && entities.value) {
+        if (
+          is.string(entities.value) &&
+          Buffer.from(entities.value).length > MAX_DATASTORE_VALUE_LENGTH
+        ) {
+          entities.excludeFromIndexes = true;
+        }
+      }
       for (const key of keys) {
         findLargeProperties_(
           entities[key],

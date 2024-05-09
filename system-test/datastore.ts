@@ -297,8 +297,10 @@ async.each(
             {
               name: 'field_b',
               value: {
-                nestedField: Buffer.alloc(1501, '.').toString(),
+                name: 'nestedField',
+                value: Buffer.alloc(1501, '.').toString(),
               },
+              excludeFromIndexes: true,
             },
           ];
 
