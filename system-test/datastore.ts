@@ -17,7 +17,7 @@ import {readFileSync} from 'fs';
 import * as path from 'path';
 import {after, before, describe, it} from 'mocha';
 import * as yaml from 'js-yaml';
-import {Datastore, DatastoreOptions, Index, Transaction} from '../src';
+import {arrayToProto, Datastore, DatastoreOptions, Index, Transaction} from '../src';
 import {google} from '../protos/protos';
 import {Storage} from '@google-cloud/storage';
 import {AggregateField} from '../src/aggregate';
@@ -341,7 +341,28 @@ async.each(
             projectId: 'cloud-native-db-dpes-shared',
           });
         });
-        it.only('should auto remove index with excludeLargeProperties enabled', async () => {
+        it.only('a test to compare values for arrayToProto to entityProto', async () => {
+          const postKey = datastore.key(['Post', 'post2']);
+          const entityObject = {
+            key: postKey,
+            data: [
+              {
+                name: 'name',
+                value: 'value',
+                excludeFromIndexes: true,
+              },
+            ],
+            excludeFromIndexes: [],
+          };
+          const comparator1 = arrayToProto(entityObject);
+          const comparator2 = entity.entityToEntityProto(entityObject);
+          console.log('arrayToProto');
+          console.log(comparator1);
+          console.log('entity to proto');
+          console.log(comparator2);
+          console.log('inspect both');
+        });
+        it('should auto remove index with excludeLargeProperties enabled', async () => {
           const postKey = datastore.key(['Post', 'post2']);
           const data = [
             {

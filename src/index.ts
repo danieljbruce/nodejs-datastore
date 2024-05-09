@@ -115,6 +115,37 @@ export interface ImportEntitiesConfig
   gaxOptions?: CallOptions;
 }
 
+export function arrayToProto(entityObject: Entity) {
+  const entityProto = {
+    properties: undefined,
+  };
+  entityProto.properties = entityObject.data.reduce(
+    (acc: EntityProtoReduceAccumulator, data: EntityProtoReduceData) => {
+      const value = entity.encodeValue(data.value, data.name.toString());
+
+      if (typeof data.excludeFromIndexes === 'boolean') {
+        const excluded = data.excludeFromIndexes;
+        let values = value.arrayValue && value.arrayValue.values;
+
+        if (values) {
+          values = values.map((x: ValueProto) => {
+            x.excludeFromIndexes = excluded;
+            return x;
+          });
+        } else {
+          value.excludeFromIndexes = data.excludeFromIndexes;
+        }
+      }
+
+      acc[data.name] = value;
+
+      return acc;
+    },
+    {}
+  );
+  return entityProto;
+}
+
 // Import the clients for each version supported by this package.
 const gapic = Object.freeze({
   v1: require('./v1'),
@@ -1125,36 +1156,7 @@ class Datastore extends DatastoreRequest {
         // This was replaced with a more efficient mechanism in the top-level
         // `excludeFromIndexes` option.
         if (Array.isArray(entityObject.data)) {
-          entityProto.properties = entityObject.data.reduce(
-            (
-              acc: EntityProtoReduceAccumulator,
-              data: EntityProtoReduceData
-            ) => {
-              const value = entity.encodeValue(
-                data.value,
-                data.name.toString()
-              );
-
-              if (typeof data.excludeFromIndexes === 'boolean') {
-                const excluded = data.excludeFromIndexes;
-                let values = value.arrayValue && value.arrayValue.values;
-
-                if (values) {
-                  values = values.map((x: ValueProto) => {
-                    x.excludeFromIndexes = excluded;
-                    return x;
-                  });
-                } else {
-                  value.excludeFromIndexes = data.excludeFromIndexes;
-                }
-              }
-
-              acc[data.name] = value;
-
-              return acc;
-            },
-            {}
-          );
+          arrayToProto(entityObject);
         } else {
           entityProto = entity.entityToEntityProto(entityObject);
         }
