@@ -145,6 +145,36 @@ export function arrayToProto(entityObject: Entity) {
   );
   return entityProto;
 }
+export function arrayToProtoTest(entityObject: Entity) {
+  const entityProto = {
+    properties: undefined,
+  };
+  entityProto.properties = entityObject.data.reduce(
+    (acc: EntityProtoReduceAccumulator, data: EntityProtoReduceData) => {
+      const value = entity.encodeValue(data.value, data.name.toString());
+
+      if (typeof data.excludeFromIndexes === 'boolean') {
+        const excluded = data.excludeFromIndexes;
+        let values = value.arrayValue && value.arrayValue.values;
+
+        if (values) {
+          values = values.map((x: ValueProto) => {
+            x.excludeFromIndexes = excluded;
+            return x;
+          });
+        } else {
+          value.excludeFromIndexes = data.excludeFromIndexes;
+        }
+      }
+
+      acc[data.name] = value;
+
+      return acc;
+    },
+    {}
+  );
+  return entityProto;
+}
 
 // Import the clients for each version supported by this package.
 const gapic = Object.freeze({
@@ -1156,10 +1186,17 @@ class Datastore extends DatastoreRequest {
         // This was replaced with a more efficient mechanism in the top-level
         // `excludeFromIndexes` option.
         if (Array.isArray(entityObject.data)) {
-          arrayToProto(entityObject);
+          entityProto = arrayToProto(entityObject);
+          const excludeFromIndexes = entityObject.excludeFromIndexes;
+          if (excludeFromIndexes && excludeFromIndexes.length > 0) {
+            excludeFromIndexes.forEach((excludePath: string) => {
+              entity.excludePathFromEntity(entityProto, excludePath);
+            });
+          }
         } else {
           entityProto = entity.entityToEntityProto(entityObject);
         }
+        // entityProto = entity.entityToEntityProto(entityObject);
         if (
           entityProto &&
           entityProto.properties &&
