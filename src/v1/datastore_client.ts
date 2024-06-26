@@ -981,6 +981,7 @@ export class DatastoreClient {
     ]
   > | void {
     request = request || {};
+    console.log(JSON.stringify(request));
     let options: CallOptions;
     if (typeof optionsOrCallback === 'function' && callback === undefined) {
       callback = optionsOrCallback;

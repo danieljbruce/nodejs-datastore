@@ -770,6 +770,32 @@ async.each(
             const [entity] = await datastore.get(key);
             assert.deepStrictEqual(entity.location, geoPointValue);
           });
+
+          it('multidb should save', async () => {
+            const secondDatabase = new Datastore({
+              databaseId: SECOND_DATABASE_ID,
+            });
+            const key = secondDatabase.key(['ParentKind', 1, 'Kind', 1]);
+            await secondDatabase.save({
+              key,
+              data: {
+                location: '',
+              },
+            });
+          });
+          it.only('multidb should with original database', async () => {
+            console.log('running test');
+            const secondDatabase = new Datastore({
+              databaseId: SECOND_DATABASE_ID,
+            });
+            const key = secondDatabase.key(['ParentKind', 1, 'Kind', 1]);
+            await datastore.save({
+              key,
+              data: {
+                location: '',
+              },
+            });
+          });
         });
       });
 
